@@ -423,6 +423,9 @@ function matchHtml({ c, mixed }) {
   if (mixed) parts.push('Mixed');
   const round = roundLabel(c.round?.displayName);
   if (round) parts.push(esc(round));
+  // Court des Matches (im Feed teils leer, dann weglassen)
+  const court = (c.venue?.court || '').trim();
+  if (court) parts.push(esc(court));
   if (stateCode === 'in') {
     parts.push('<span class="live-badge"><span class="live-dot"></span>LIVE · ' + esc(st.type?.detail || '') + '</span>');
   } else if (stateCode === 'pre') {
