@@ -1,19 +1,29 @@
 # 🎾 Tennis Live – ATP & WTA in einer App
 
-Eine kleine Web-App für das iPhone, die die Live-Spielstände der **ATP-** und
-**WTA-Tour** in einer Ansicht zusammenführt – mit einem Schalter zum Wechseln
-zwischen den beiden Touren. Kein Backend, kein Build-Schritt: eine einzige
-HTML-Datei plus App-Icon.
+Eine kleine Web-App für das iPhone (optimiert für das **iPhone SE**,
+375 × 667 pt), die die Live-Spielstände der **ATP-** und **WTA-Tour** in
+einer Ansicht zusammenführt. Kein Backend, kein Build-Schritt: eine einzige
+HTML-Datei plus App-Icon. Oberfläche auf **britischem Englisch**.
+
+## Navigation
+
+Drei Schalter-Reihen, von oben nach unten:
+
+1. **ATP / WTA** – Tour wählen
+2. **Singles / Doubles** – Disziplin (Mixed zählt zu Doubles)
+3. **Live / Finished / Upcoming** – Status; der Live-Tab zeigt die Anzahl
+   laufender Matches der aktuellen Auswahl
+
+Darunter die Matches, **nach Turnier gruppiert**. Die zuletzt gewählte
+Ansicht wird gemerkt.
 
 ## Funktionen
 
-- **ATP/WTA-Umschalter** – die zuletzt gewählte Tour wird gemerkt
-- **Live-Matches** immer oben und rot markiert, laufender Satz hervorgehoben
-- **Beendet / Anstehend** pro Konkurrenz auf- und zuklappbar
+- Laufender Satz im Live-Match farblich hervorgehoben
 - Satzergebnisse mit Tiebreak-Punkten, Siegerinnen/Sieger fett
 - Automatische Aktualisierung jede Minute (nur solange die App sichtbar ist),
   zusätzlich manueller Aktualisieren-Knopf
-- Alle Zeiten in deutscher Zeit, Oberfläche auf Deutsch
+- Alle Zeiten in deutscher Zeit (Europe/Berlin)
 
 ## Datenquelle
 
