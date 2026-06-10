@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tennis Live – ATP &amp; WTA</title>
+<!-- iOS "Zum Home-Bildschirm hinzufügen": Seite verhält sich wie eine App -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tennis">
+<meta name="theme-color" content="#0b1120">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.png">
+<style>
+  :root {
+    --bg: #0b1120;          /* dunkler Hintergrund */
+    --card: #151f36;        /* Turnier-Karten */
+    --card-inner: #1c2942;  /* Match-Zeilen */
+    --text: #e9eef8;
+    --muted: #8d99b2;
+    --accent: #d8e84a;      /* Tennisball-Gelbgrün */
+    --live: #ff5263;
+    --border: #263350;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.35;
+    /* Platz für die iPhone-Home-Leiste */
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* ---------- Kopfbereich (sticky) ---------- */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(11, 17, 32, 0.92);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+    /* Platz für die Notch im Standalone-Modus */
+    padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+  }
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: 0.2px; }
+  h1 .ball { color: var(--accent); }
+
+  #refreshBtn {
+    background: var(--card-inner);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    flex: none;
+  }
+  #refreshBtn.spinning svg { animation: spin 0.9s linear infinite; }
+  #refreshBtn svg { display: block; margin: auto; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Segment-Schalter ATP / WTA */
+  .tabs {
+    display: flex;
+    margin-top: 10px;
+    background: var(--card-inner);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 3px;
+  }
+  .tab {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 15px;
+    font-weight: 700;
+    padding: 8px 0;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .tab.active { background: var(--accent); color: #1a2208; }
+
+  /* ---------- Statuszeile ---------- */
+  .statusline {
+    padding: 8px 16px 0;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .statusline .error { color: var(--live); font-weight: 600; }
+
+  /* ---------- Inhalt ---------- */
+  main { padding: 10px 12px 0; max-width: 640px; margin: 0 auto; }
+  .hint { color: var(--muted); text-align: center; padding: 40px 16px; }
+
+  .tournament {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .tournament > h2 {
+    font-size: 16px;
+    margin: 0;
+    padding: 12px 14px 4px;
+  }
+  .tournament .venue {
+    padding: 0 14px 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .grouping { padding: 2px 10px 10px; }
+  .grouping > h3 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--accent);
+    margin: 8px 4px 6px;
+    font-weight: 700;
+  }
+
+  /* Auf-/zuklappbare Bereiche für beendete und anstehende Matches */
+  details { margin-top: 6px; }
+  summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 4px;
+    list-style: none;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "▸ "; }
+  details[open] summary::before { content: "▾ "; }
+
+  /* ---------- Einzelnes Match ---------- */
+  .match {
+    background: var(--card-inner);
+    border-radius: 10px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+  }
+  .match-meta {
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .live-badge {
+    color: var(--live);
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--live);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 50% { opacity: 0.25; } }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 2px 0;
+  }
+  .flagwrap { display: inline-flex; gap: 3px; flex: none; }
+  .flag { width: 18px; height: 12px; object-fit: cover; border-radius: 2px; display: block; }
+  .name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+  }
+  .name.winner { color: var(--text); font-weight: 700; }
+  .name.playing { color: var(--text); }
+
+  .sets { display: flex; gap: 2px; flex: none; }
+  .set {
+    min-width: 22px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+  .set.won { color: var(--text); font-weight: 700; }
+  .set.cur { color: var(--accent); font-weight: 700; }
+  .set sup { font-size: 9px; }
+
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 11px;
+    padding: 14px 16px 4px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="topbar">
+    <h1><span class="ball">●</span> Tennis Live</h1>
+    <button id="refreshBtn" type="button" aria-label="Aktualisieren" title="Aktualisieren">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+        <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
+      </svg>
+    </button>
+  </div>
+  <div class="tabs" role="tablist">
+    <button class="tab" data-tour="atp" role="tab">ATP</button>
+    <button class="tab" data-tour="wta" role="tab">WTA</button>
+  </div>
+</header>
+
+<div id="status" class="statusline"></div>
+<main id="content"><div class="hint">Lade Spielstände …</div></main>
+<footer>Datenquelle: ESPN-Scoreboard (ATP &amp; WTA) · Zeiten in deutscher Zeit</footer>
+
+<script>
+'use strict';
+
+/* =====================================================================
+   Tennis Live – aggregiert ATP- und WTA-Spielstände in einer Ansicht.
+   Datenquelle: öffentliches ESPN-Scoreboard-JSON (sendet CORS "*",
+   daher direkt aus dem Browser abrufbar – kein Server nötig).
+   ===================================================================== */
+
+const API = {
+  atp: 'https://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard',
+  wta: 'https://site.api.espn.com/apis/site/v2/sports/tennis/wta/scoreboard',
+};
+const REFRESH_MS = 60_000; // automatische Aktualisierung der aktiven Tour
+
+const state = {
+  tour: localStorage.getItem('tour') === 'wta' ? 'wta' : 'atp',
+  data: { atp: null, wta: null },       // zuletzt geladene Rohdaten je Tour
+  fetchedAt: { atp: 0, wta: 0 },        // Zeitstempel der letzten Aktualisierung
+  loading: false,
+  error: null,
+};
+
+/* ---------- kleine Helfer ---------- */
+
+// HTML-Sonderzeichen maskieren (Spielernamen kommen aus Fremddaten)
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+const fmtTime = new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
+const fmtDay = new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', weekday: 'short', day: '2-digit', month: '2-digit' });
+const fmtClock = new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+// Startzeit eines angesetzten Matches anzeigen ("14:30" heute, sonst mit Datum)
+function formatStart(dateStr, timeValid) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d)) return '';
+  const sameDay = fmtDay.format(d) === fmtDay.format(new Date());
+  if (timeValid === false) return sameDay ? 'heute, Zeit offen' : fmtDay.format(d) + ', Zeit offen';
+  return sameDay ? fmtTime.format(d) + ' Uhr' : fmtDay.format(d) + ', ' + fmtTime.format(d);
+}
+
+// ESPN-Statustexte eindeutschen; Unbekanntes bleibt im Original sichtbar
+function translateStatus(type) {
+  const detail = type?.detail || type?.description || '';
+  let m = detail.match(/^(\d+)(?:st|nd|rd|th) Set$/);
+  if (m) return m[1] + '. Satz';
+  const map = {
+    'Final': 'Beendet', 'In Progress': 'Live', 'Scheduled': 'Geplant',
+    'Suspended': 'Unterbrochen', 'Delayed': 'Verzögert',
+    'Postponed': 'Verschoben', 'Canceled': 'Abgesagt', 'Cancelled': 'Abgesagt',
+    'Walkover': 'Walkover',
+  };
+  if (map[detail]) return map[detail];
+  if (/retired/i.test(detail)) return 'Beendet (Aufgabe)';
+  return detail;
+}
+
+// Rundennamen eindeutschen
+function translateRound(name) {
+  if (!name) return '';
+  const map = {
+    'Final': 'Finale',
+    'Semifinal': 'Halbfinale', 'Semifinals': 'Halbfinale',
+    'Quarterfinal': 'Viertelfinale', 'Quarterfinals': 'Viertelfinale',
+    'Round of 16': 'Achtelfinale', 'Qualifying Final': 'Qualifikation, Finale',
+  };
+  if (map[name]) return map[name];
+  let m = name.match(/^Round (\d+)$/);
+  if (m) return m[1] + '. Runde';
+  m = name.match(/^(\d+)(?:st|nd|rd|th) Round$/);
+  if (m) return m[1] + '. Runde';
+  m = name.match(/^Qualifying (\d+)(?:st|nd|rd|th) Round$/);
+  if (m) return 'Qualifikation, ' + m[1] + '. Runde';
+  m = name.match(/^Round of (\d+)$/);
+  if (m) return 'Runde der letzten ' + m[1];
+  return name;
+}
+
+// Konkurrenz-Namen eindeutschen ("Men's Singles" → "Herreneinzel")
+function translateGrouping(name) {
+  const map = {
+    "Men's Singles": 'Herreneinzel', "Women's Singles": 'Dameneinzel',
+    "Men's Doubles": 'Herrendoppel', "Women's Doubles": 'Damendoppel',
+    'Mixed Doubles': 'Mixed',
+  };
+  return map[name] || name || '';
+}
+
+// Name eines Teilnehmers (Einzel: "athlete", Doppel-Team: "roster")
+function compName(comp) {
+  if (comp?.athlete) return comp.athlete.shortName || comp.athlete.displayName || 'N. N.';
+  if (comp?.roster) return comp.roster.shortDisplayName || comp.roster.displayName || 'N. N.';
+  return 'N. N.';
+}
+
+// Flaggen eines Teilnehmers (beim Doppel: beide Spielerinnen/Spieler)
+function compFlags(comp) {
+  if (comp?.athlete?.flag) return [comp.athlete.flag];
+  if (Array.isArray(comp?.roster?.athletes)) {
+    return comp.roster.athletes.map((a) => a.flag).filter(Boolean);
+  }
+  return [];
+}
+
+/* ---------- Daten laden ---------- */
+
+async function loadTour(tour) {
+  // cache: 'no-store', damit Safari keine veralteten Stände anzeigt
+  const res = await fetch(API[tour], { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  state.data[tour] = await res.json();
+  state.fetchedAt[tour] = Date.now();
+}
+
+async function refresh(tour = state.tour) {
+  if (state.loading) return;
+  state.loading = true;
+  updateChrome();
+  try {
+    await loadTour(tour);
+    state.error = null;
+  } catch (e) {
+    // Fehler deutlich anzeigen, aber die letzten bekannten Daten stehen lassen
+    state.error = 'Aktualisierung fehlgeschlagen (' + e.message + ')';
+  }
+  state.loading = false;
+  updateChrome();
+  if (tour === state.tour) render();
+}
+
+/* ---------- Darstellung ---------- */
+
+function setsHtml(comp, status) {
+  const live = status?.type?.state === 'in';
+  const curIdx = (status?.period || 0) - 1; // laufender Satz (1-basiert)
+  const ls = comp?.linescores || [];
+  return ls.map((s, i) => {
+    const val = (s?.value ?? '') === '' ? '' : Math.trunc(s.value);
+    const tb = s?.tiebreak != null ? '<sup>' + esc(s.tiebreak) + '</sup>' : '';
+    const cls = ['set', s?.winner ? 'won' : '', live && i === curIdx ? 'cur' : ''].filter(Boolean).join(' ');
+    return '<span class="' + cls + '">' + val + tb + '</span>';
+  }).join('');
+}
+
+function rowHtml(comp, status) {
+  const live = status?.type?.state === 'in';
+  const flags = compFlags(comp).map((f) =>
+    '<img class="flag" loading="lazy" src="' + esc(f.href) + '" alt="' + esc(f.alt || '') + '">'
+  ).join('');
+  const nameCls = comp?.winner ? 'name winner' : (live ? 'name playing' : 'name');
+  return '<div class="row">' +
+    '<span class="flagwrap">' + flags + '</span>' +
+    '<span class="' + nameCls + '">' + esc(compName(comp)) + '</span>' +
+    '<span class="sets">' + setsHtml(comp, status) + '</span>' +
+    '</div>';
+}
+
+function matchHtml(c) {
+  const st = c.status || {};
+  const stateCode = st.type?.state;
+  const round = translateRound(c.round?.displayName);
+  let statusLabel;
+  if (stateCode === 'in') {
+    statusLabel = '<span class="live-badge"><span class="live-dot"></span>LIVE · ' + esc(translateStatus(st.type)) + '</span>';
+  } else if (stateCode === 'pre') {
+    statusLabel = esc(formatStart(c.date, c.timeValid));
+  } else {
+    statusLabel = esc(translateStatus(st.type));
+  }
+  const comps = (c.competitors || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+  return '<div class="match">' +
+    '<div class="match-meta">' + (round ? esc(round) + ' · ' : '') + statusLabel + '</div>' +
+    comps.map((comp) => rowHtml(comp, st)).join('') +
+    '</div>';
+}
+
+// Konkurrenzen nach Tour filtern: kombinierte Turniere (z. B. Libéma Open)
+// tauchen in beiden Feeds mit allen Konkurrenzen auf
+function groupingBelongsToTour(name, tour) {
+  if (tour === 'atp') return !/^Women's/.test(name || '');
+  return !/^Men's/.test(name || '');
+}
+
+function groupingHtml(g) {
+  const name = g.grouping?.displayName || '';
+  const comps = g.competitions || [];
+  const live = comps.filter((c) => c.status?.type?.state === 'in');
+  const post = comps.filter((c) => c.status?.type?.state === 'post')
+    .sort((a, b) => new Date(b.date) - new Date(a.date)); // Neueste zuerst
+  const pre = comps.filter((c) => c.status?.type?.state === 'pre')
+    .sort((a, b) => new Date(a.date) - new Date(b.date)); // Nächste zuerst
+  if (!live.length && !post.length && !pre.length) return '';
+
+  let html = '<div class="grouping"><h3>' + esc(translateGrouping(name)) + '</h3>';
+  html += live.map(matchHtml).join('');
+  if (post.length) {
+    // Live-Matches immer sichtbar; Ergebnisse standardmäßig aufgeklappt,
+    // sobald es keine Live-Matches gibt – sonst eingeklappt
+    html += '<details' + (live.length ? '' : ' open') + '><summary>Beendet (' + post.length + ')</summary>' +
+      post.map(matchHtml).join('') + '</details>';
+  }
+  if (pre.length) {
+    html += '<details><summary>Anstehend (' + pre.length + ')</summary>' +
+      pre.map(matchHtml).join('') + '</details>';
+  }
+  return html + '</div>';
+}
+
+function tournamentHtml(ev, tour) {
+  const groupings = (ev.groupings || [])
+    .filter((g) => groupingBelongsToTour(g.grouping?.displayName, tour));
+  const inner = groupings.map(groupingHtml).join('');
+  if (!inner) return '';
+  const venue = ev.venue?.fullName || '';
+  return '<section class="tournament">' +
+    '<h2>' + esc(ev.name || 'Turnier') + '</h2>' +
+    (venue ? '<div class="venue">' + esc(venue) + '</div>' : '') +
+    inner + '</section>';
+}
+
+function render() {
+  const content = document.getElementById('content');
+  const d = state.data[state.tour];
+  if (!d) {
+    content.innerHTML = '<div class="hint">' + (state.error ? esc(state.error) : 'Lade Spielstände …') + '</div>';
+    return;
+  }
+  const html = (d.events || []).map((ev) => tournamentHtml(ev, state.tour)).join('');
+  content.innerHTML = html || '<div class="hint">Zurzeit keine laufenden Turniere.</div>';
+}
+
+// Kopfzeile: Tabs, Lade-Anzeige, Zeitstempel, Fehler
+function updateChrome() {
+  document.querySelectorAll('.tab').forEach((b) => {
+    b.classList.toggle('active', b.dataset.tour === state.tour);
+  });
+  document.getElementById('refreshBtn').classList.toggle('spinning', state.loading);
+  const status = document.getElementById('status');
+  const ts = state.fetchedAt[state.tour];
+  let html = ts ? 'Aktualisiert um ' + fmtClock.format(new Date(ts)) : '';
+  if (state.error) html += (html ? ' · ' : '') + '<span class="error">' + esc(state.error) + '</span>';
+  status.innerHTML = html;
+}
+
+/* ---------- Interaktion ---------- */
+
+function switchTour(tour) {
+  state.tour = tour;
+  localStorage.setItem('tour', tour);
+  updateChrome();
+  render();
+  // Beim Wechsel nachladen, falls die Daten fehlen oder veraltet sind
+  if (!state.data[tour] || Date.now() - state.fetchedAt[tour] > REFRESH_MS) refresh(tour);
+}
+
+document.querySelectorAll('.tab').forEach((b) => {
+  b.addEventListener('click', () => switchTour(b.dataset.tour));
+});
+document.getElementById('refreshBtn').addEventListener('click', () => refresh());
+
+// Automatisch aktualisieren, aber nur solange die Seite sichtbar ist
+setInterval(() => {
+  if (document.visibilityState === 'visible' &&
+      Date.now() - state.fetchedAt[state.tour] >= REFRESH_MS) {
+    refresh();
+  }
+}, 15_000);
+
+// Beim Zurückkehren zur App (Home-Bildschirm) sofort frische Daten holen
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' &&
+      Date.now() - state.fetchedAt[state.tour] >= REFRESH_MS) {
+    refresh();
+  }
+});
+
+/* ---------- Start ---------- */
+updateChrome();
+refresh().then(() => {
+  // Die jeweils andere Tour im Hintergrund vorladen, damit der Wechsel sofort klappt
+  const other = state.tour === 'atp' ? 'wta' : 'atp';
+  loadTour(other).catch(() => { /* Vorladen ist optional; Fehler zeigt der Wechsel selbst */ });
+});
+</script>
+</body>
+</html>
