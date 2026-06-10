@@ -9,9 +9,12 @@ HTML-Datei plus App-Icon. Oberfläche auf **britischem Englisch**.
 
 - Oben: **ATP / WTA** als markanter Segment-Schalter, darunter
   **Singles / Doubles** als dezente Text-Tabs (Mixed zählt zu Doubles)
-- Unten: **Live / Finished / Upcoming** in einer schwebenden
+- Unten: **Live / Finished / Upcoming / Rankings** in einer schwebenden
   „Liquid-Glass"-Leiste; der Live-Tab zeigt die Anzahl laufender
   Matches der aktuellen Auswahl
+- **Rankings**: Weltrangliste (Top 150) der gewählten Tour mit Punkten
+  und Trend-Pfeilen; Singles/Doubles blendet sich dort aus, da der Feed
+  nur Einzel-Ranglisten liefert
 
 Dazwischen die Matches, **nach Turnier gruppiert** und innerhalb des
 Turniers **nach Runden** mit kleinen Zwischenüberschriften. Die zuletzt
@@ -20,6 +23,7 @@ gewählte Ansicht wird gemerkt.
 ## Funktionen
 
 - **Court** jedes Matches in der Infozeile (sofern der Feed ihn liefert)
+- **Setzlisten-Nummer** in Klammern neben dem Namen
 - Laufender Satz im Live-Match farblich hervorgehoben
 - Satzergebnisse mit Tiebreak-Punkten, Siegerinnen/Sieger fett
 - Automatische Aktualisierung jede Minute (nur solange die App sichtbar ist),

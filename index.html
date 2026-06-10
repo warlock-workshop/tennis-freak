@@ -125,13 +125,44 @@
     background: transparent;
     color: #c3cce0;
     font-weight: 700;
-    font-size: 12.5px;
-    padding: 7px 14px;
+    font-size: 12px;
+    padding: 7px 10px;
     border-radius: 999px;
     cursor: pointer;
     white-space: nowrap;
   }
   .bottombar button.active { background: var(--accent); color: #1a2208; }
+
+  /* ---------- Weltrangliste ---------- */
+  .rank-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .rank-row:last-child { border-bottom: none; }
+  .rank-no {
+    min-width: 26px;
+    text-align: right;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+    font-weight: 700;
+    flex: none;
+  }
+  .rank-row .name { color: var(--text); }
+  .trend { flex: none; font-size: 10.5px; font-weight: 700; }
+  .trend.up { color: #4ade80; }
+  .trend.down { color: var(--live); }
+  .rank-pts {
+    flex: none;
+    min-width: 48px;
+    text-align: right;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+  }
 
   #refreshBtn {
     background: var(--card-inner);
@@ -301,6 +332,7 @@
   <button data-val="in" role="tab" id="liveTab">Live</button>
   <button data-val="post" role="tab">Finished</button>
   <button data-val="pre" role="tab">Upcoming</button>
+  <button data-val="rankings" role="tab">Rankings</button>
 </nav>
 
 <script>
@@ -318,7 +350,12 @@ const API = {
   atp: 'https://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard',
   wta: 'https://site.api.espn.com/apis/site/v2/sports/tennis/wta/scoreboard',
 };
-const REFRESH_MS = 60_000; // automatische Aktualisierung der aktiven Tour
+const RANKINGS_API = {
+  atp: 'https://site.api.espn.com/apis/site/v2/sports/tennis/atp/rankings',
+  wta: 'https://site.api.espn.com/apis/site/v2/sports/tennis/wta/rankings',
+};
+const REFRESH_MS = 60_000;            // automatische Aktualisierung der aktiven Tour
+const RANKINGS_TTL = 3_600_000;       // Rangliste ändert sich wöchentlich – 1 h Cache reicht
 
 // Auswahl aus dem letzten Besuch wiederherstellen (ungültige Werte ignorieren)
 function restore(key, allowed, fallback) {
@@ -329,9 +366,11 @@ function restore(key, allowed, fallback) {
 const state = {
   tour: restore('tour', ['atp', 'wta'], 'atp'),
   discipline: restore('discipline', ['singles', 'doubles'], 'singles'),
-  status: restore('status', ['in', 'post', 'pre'], 'in'),
-  data: { atp: null, wta: null },       // zuletzt geladene Rohdaten je Tour
+  status: restore('status', ['in', 'post', 'pre', 'rankings'], 'in'),
+  data: { atp: null, wta: null },       // zuletzt geladene Scoreboard-Rohdaten je Tour
   fetchedAt: { atp: 0, wta: 0 },        // Zeitstempel der letzten Aktualisierung
+  rankings: { atp: null, wta: null },   // Weltrangliste je Tour (nur Einzel im Feed)
+  rankingsAt: { atp: 0, wta: 0 },
   loading: false,
   error: null,
 };
@@ -400,20 +439,39 @@ async function loadTour(tour) {
   state.fetchedAt[tour] = Date.now();
 }
 
-async function refresh(tour = state.tour) {
+async function loadRankings(tour) {
+  const res = await fetch(RANKINGS_API[tour], { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const d = await res.json();
+  state.rankings[tour] = d.rankings?.[0] || null;
+  state.rankingsAt[tour] = Date.now();
+}
+
+// Gemeinsamer Lade-Rahmen: Fehler deutlich anzeigen,
+// aber die letzten bekannten Daten stehen lassen
+async function withLoading(tour, loader) {
   if (state.loading) return;
   state.loading = true;
   updateChrome();
   try {
-    await loadTour(tour);
+    await loader(tour);
     state.error = null;
   } catch (e) {
-    // Fehler deutlich anzeigen, aber die letzten bekannten Daten stehen lassen
     state.error = 'Update failed (' + e.message + ')';
   }
   state.loading = false;
   if (tour === state.tour) render();
   updateChrome();
+}
+
+const refresh = (tour = state.tour) => withLoading(tour, loadTour);
+const refreshRankings = (tour = state.tour) => withLoading(tour, loadRankings);
+
+// Rangliste nur laden, wenn sie fehlt oder älter als die TTL ist
+function ensureRankings(tour) {
+  if (!state.rankings[tour] || Date.now() - state.rankingsAt[tour] > RANKINGS_TTL) {
+    refreshRankings(tour);
+  }
 }
 
 /* ---------- Filterung ---------- */
@@ -542,7 +600,51 @@ const EMPTY = {
   pre: 'No upcoming matches scheduled.',
 };
 
+const fmtPoints = new Intl.NumberFormat('en-GB');
+
+// Eine Zeile der Weltrangliste: Platz, Flagge, Name, Trend, Punkte
+function rankRowHtml(e) {
+  const a = e.athlete || {};
+  // Im Rankings-Feed ist flag ein nackter URL-String (im Scoreboard ein Objekt)
+  const flagUrl = typeof a.flag === 'string' ? a.flag : a.flag?.href;
+  const flag = flagUrl
+    ? '<img class="flag" loading="lazy" src="' + esc(flagUrl) + '" alt="">'
+    : '';
+  // Trend aus dem Feed: "+2", "-1" oder "-" (unverändert)
+  const t = (e.trend || '').trim();
+  let trend = '';
+  if (t.startsWith('+')) trend = '<span class="trend up">▲' + esc(t.slice(1)) + '</span>';
+  else if (t.startsWith('-') && t !== '-') trend = '<span class="trend down">▼' + esc(t.slice(1)) + '</span>';
+  return '<div class="rank-row">' +
+    '<span class="rank-no">' + esc(e.current) + '</span>' +
+    '<span class="flagwrap">' + flag + '</span>' +
+    '<span class="name">' + esc(a.displayName || a.shortname || '–') + '</span>' +
+    trend +
+    '<span class="rank-pts">' + (e.points != null ? fmtPoints.format(e.points) : '') + '</span>' +
+    '</div>';
+}
+
+function renderRankings() {
+  const content = document.getElementById('content');
+  const r = state.rankings[state.tour];
+  if (!r) {
+    content.innerHTML = '<div class="hint">' + (state.error ? esc(state.error) : 'Loading rankings …') + '</div>';
+    return;
+  }
+  const ranks = r.ranks || [];
+  const updated = r.update ? ' · updated ' + fmtDay.format(new Date(r.update)) : '';
+  content.innerHTML = '<section class="tournament">' +
+    '<h2>' + esc(state.tour.toUpperCase()) + ' World Ranking</h2>' +
+    '<div class="venue">Singles · Top ' + ranks.length + updated + '</div>' +
+    ranks.map(rankRowHtml).join('') +
+    '</section>';
+}
+
 function render() {
+  if (state.status === 'rankings') {
+    renderRankings();
+    return;
+  }
   const content = document.getElementById('content');
   const groups = matchesFor(state.tour, state.discipline, state.status);
   if (groups === null) {
@@ -569,6 +671,10 @@ function updateChrome() {
     : 0;
   document.getElementById('liveTab').innerHTML = 'Live' + (n ? ' <span class="count">' + n + '</span>' : '');
 
+  // Singles/Doubles greift in der Rankings-Ansicht nicht (Feed hat nur Einzel)
+  document.querySelector('.tabs-discipline').style.display =
+    state.status === 'rankings' ? 'none' : 'flex';
+
   document.getElementById('refreshBtn').classList.toggle('spinning', state.loading);
   const status = document.getElementById('status');
   const ts = state.fetchedAt[state.tour];
@@ -588,12 +694,15 @@ function select(key, val) {
   if (key === 'tour' && (!state.data[val] || Date.now() - state.fetchedAt[val] > REFRESH_MS)) {
     refresh(val);
   }
+  // Rangliste bei Bedarf laden (Wechsel in die Ansicht oder der Tour darin)
+  if (state.status === 'rankings') ensureRankings(state.tour);
 }
 
 document.querySelectorAll('[data-key] button').forEach((b) => {
   b.addEventListener('click', () => select(b.closest('[data-key]').dataset.key, b.dataset.val));
 });
-document.getElementById('refreshBtn').addEventListener('click', () => refresh());
+document.getElementById('refreshBtn').addEventListener('click', () =>
+  state.status === 'rankings' ? refreshRankings() : refresh());
 
 // Automatisch aktualisieren, aber nur solange die Seite sichtbar ist
 setInterval(() => {
@@ -614,6 +723,8 @@ document.addEventListener('visibilitychange', () => {
 /* ---------- Start ---------- */
 updateChrome();
 refresh().then(() => {
+  // Startet die App in der gemerkten Rankings-Ansicht, Rangliste nachladen
+  if (state.status === 'rankings') ensureRankings(state.tour);
   // Die jeweils andere Tour im Hintergrund vorladen, damit der Wechsel sofort klappt
   const other = state.tour === 'atp' ? 'wta' : 'atp';
   loadTour(other).catch(() => { /* Vorladen ist optional; Fehler zeigt der Wechsel selbst */ });
