@@ -1,4 +1,4 @@
-# 🎾 Tennis Live – ATP & WTA in einer App
+# 🎾 Tennis Freak – ATP & WTA in einer App
 
 Eine kleine Web-App für das iPhone (optimiert für das **iPhone SE**,
 375 × 667 pt), die die Live-Spielstände der **ATP-** und **WTA-Tour** in
