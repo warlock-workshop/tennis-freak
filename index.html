@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en-GB">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Tennis Live – ATP &amp; WTA</title>
-<!-- iOS "Zum Home-Bildschirm hinzufügen": Seite verhält sich wie eine App -->
+<!-- iOS "Add to Home Screen": Seite verhält sich wie eine App -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -13,6 +13,8 @@
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="icon" href="icon.png">
 <style>
+  /* Zielgerät: iPhone SE (375 x 667 pt) – kompakter Kopfbereich,
+     damit möglichst viel Platz für die Match-Liste bleibt */
   :root {
     --bg: #0b1120;          /* dunkler Hintergrund */
     --card: #151f36;        /* Turnier-Karten */
@@ -32,135 +34,116 @@
     font-size: 15px;
     line-height: 1.35;
     /* Platz für die iPhone-Home-Leiste */
-    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
     -webkit-text-size-adjust: 100%;
   }
 
-  /* ---------- Kopfbereich (sticky) ---------- */
+  /* ---------- Kopfbereich (sticky): drei kompakte Schalter-Reihen ---------- */
   header {
     position: sticky;
     top: 0;
     z-index: 10;
-    background: rgba(11, 17, 32, 0.92);
+    background: rgba(11, 17, 32, 0.93);
     -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--border);
-    /* Platz für die Notch im Standalone-Modus */
-    padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
-  }
-  .topbar {
+    /* Platz für die iOS-Statusleiste im Standalone-Modus */
+    padding: calc(8px + env(safe-area-inset-top)) 10px 8px;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+    flex-direction: column;
+    gap: 6px;
   }
-  h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: 0.2px; }
-  h1 .ball { color: var(--accent); }
+  .seg {
+    display: flex;
+    background: var(--card-inner);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .seg button {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-weight: 700;
+    padding: 7px 0;
+    border-radius: 7px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .seg button.active { background: var(--accent); color: #1a2208; }
+  .seg-tour button { font-size: 15px; }
+  .seg-discipline button, .seg-status button { font-size: 13px; padding: 6px 0; }
 
+  .tour-row { display: flex; gap: 6px; }
+  .tour-row .seg { flex: 1; }
   #refreshBtn {
     background: var(--card-inner);
     color: var(--text);
     border: 1px solid var(--border);
-    border-radius: 50%;
-    width: 36px;
-    height: 36px;
-    font-size: 18px;
-    line-height: 1;
-    cursor: pointer;
+    border-radius: 9px;
+    width: 38px;
     flex: none;
+    cursor: pointer;
   }
   #refreshBtn.spinning svg { animation: spin 0.9s linear infinite; }
   #refreshBtn svg { display: block; margin: auto; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* Segment-Schalter ATP / WTA */
-  .tabs {
-    display: flex;
-    margin-top: 10px;
-    background: var(--card-inner);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 3px;
-    gap: 3px;
-  }
-  .tab {
-    flex: 1;
-    border: none;
-    background: transparent;
-    color: var(--muted);
-    font-size: 15px;
-    font-weight: 700;
-    padding: 8px 0;
+  /* Anzahl der Live-Matches als kleine rote Marke im "Live"-Tab */
+  .count {
+    background: var(--live);
+    color: #fff;
     border-radius: 8px;
-    cursor: pointer;
+    font-size: 10px;
+    padding: 1px 5px;
+    vertical-align: 2px;
   }
-  .tab.active { background: var(--accent); color: #1a2208; }
+  .seg button.active .count { background: #1a2208; color: var(--accent); }
 
   /* ---------- Statuszeile ---------- */
   .statusline {
-    padding: 8px 16px 0;
-    font-size: 12px;
+    padding: 6px 12px 0;
+    font-size: 11px;
     color: var(--muted);
   }
   .statusline .error { color: var(--live); font-weight: 600; }
 
-  /* ---------- Inhalt ---------- */
-  main { padding: 10px 12px 0; max-width: 640px; margin: 0 auto; }
-  .hint { color: var(--muted); text-align: center; padding: 40px 16px; }
+  /* ---------- Inhalt: Matches nach Turnier gruppiert ---------- */
+  main { padding: 8px 10px 0; max-width: 640px; margin: 0 auto; }
+  .hint { color: var(--muted); text-align: center; padding: 36px 16px; }
 
   .tournament {
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 14px;
-    margin-bottom: 14px;
-    overflow: hidden;
+    border-radius: 12px;
+    margin-bottom: 10px;
+    padding: 4px 8px 8px;
   }
   .tournament > h2 {
-    font-size: 16px;
+    font-size: 14.5px;
     margin: 0;
-    padding: 12px 14px 4px;
+    padding: 7px 4px 1px;
   }
   .tournament .venue {
-    padding: 0 14px 8px;
-    font-size: 12px;
+    padding: 0 4px 7px;
+    font-size: 11px;
     color: var(--muted);
   }
-
-  .grouping { padding: 2px 10px 10px; }
-  .grouping > h3 {
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    color: var(--accent);
-    margin: 8px 4px 6px;
-    font-weight: 700;
-  }
-
-  /* Auf-/zuklappbare Bereiche für beendete und anstehende Matches */
-  details { margin-top: 6px; }
-  summary {
-    cursor: pointer;
-    color: var(--muted);
-    font-size: 13px;
-    font-weight: 600;
-    padding: 6px 4px;
-    list-style: none;
-  }
-  summary::-webkit-details-marker { display: none; }
-  summary::before { content: "▸ "; }
-  details[open] summary::before { content: "▾ "; }
 
   /* ---------- Einzelnes Match ---------- */
   .match {
     background: var(--card-inner);
-    border-radius: 10px;
-    padding: 8px 10px;
-    margin-bottom: 6px;
-  }
-  .match-meta {
-    font-size: 11.5px;
-    color: var(--muted);
+    border-radius: 9px;
+    padding: 7px 9px;
     margin-bottom: 5px;
+  }
+  .match:last-child { margin-bottom: 0; }
+  .match-meta {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 4px;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -185,11 +168,11 @@
   .row {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 6px;
     padding: 2px 0;
   }
   .flagwrap { display: inline-flex; gap: 3px; flex: none; }
-  .flag { width: 18px; height: 12px; object-fit: cover; border-radius: 2px; display: block; }
+  .flag { width: 17px; height: 11px; object-fit: cover; border-radius: 2px; display: block; }
   .name {
     flex: 1;
     min-width: 0;
@@ -197,16 +180,18 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--muted);
+    font-size: 14px;
   }
   .name.winner { color: var(--text); font-weight: 700; }
   .name.playing { color: var(--text); }
 
   .sets { display: flex; gap: 2px; flex: none; }
   .set {
-    min-width: 22px;
+    min-width: 20px;
     text-align: center;
     font-variant-numeric: tabular-nums;
     color: var(--muted);
+    font-size: 14px;
   }
   .set.won { color: var(--text); font-weight: 700; }
   .set.cur { color: var(--accent); font-weight: 700; }
@@ -215,37 +200,47 @@
   footer {
     text-align: center;
     color: var(--muted);
-    font-size: 11px;
-    padding: 14px 16px 4px;
+    font-size: 10.5px;
+    padding: 12px 16px 2px;
   }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="topbar">
-    <h1><span class="ball">●</span> Tennis Live</h1>
-    <button id="refreshBtn" type="button" aria-label="Aktualisieren" title="Aktualisieren">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+  <div class="tour-row">
+    <div class="seg seg-tour" role="tablist" data-key="tour">
+      <button data-val="atp" role="tab">ATP</button>
+      <button data-val="wta" role="tab">WTA</button>
+    </div>
+    <button id="refreshBtn" type="button" aria-label="Refresh" title="Refresh">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
         <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
       </svg>
     </button>
   </div>
-  <div class="tabs" role="tablist">
-    <button class="tab" data-tour="atp" role="tab">ATP</button>
-    <button class="tab" data-tour="wta" role="tab">WTA</button>
+  <div class="seg seg-discipline" role="tablist" data-key="discipline">
+    <button data-val="singles" role="tab">Singles</button>
+    <button data-val="doubles" role="tab">Doubles</button>
+  </div>
+  <div class="seg seg-status" role="tablist" data-key="status">
+    <button data-val="in" role="tab" id="liveTab">Live</button>
+    <button data-val="post" role="tab">Finished</button>
+    <button data-val="pre" role="tab">Upcoming</button>
   </div>
 </header>
 
 <div id="status" class="statusline"></div>
-<main id="content"><div class="hint">Lade Spielstände …</div></main>
-<footer>Datenquelle: ESPN-Scoreboard (ATP &amp; WTA) · Zeiten in deutscher Zeit</footer>
+<main id="content"><div class="hint">Loading scores …</div></main>
+<footer>Data: ESPN scoreboard (ATP &amp; WTA) · times in German time</footer>
 
 <script>
 'use strict';
 
 /* =====================================================================
    Tennis Live – aggregiert ATP- und WTA-Spielstände in einer Ansicht.
+   Navigation: Tour (ATP/WTA) → Disziplin (Singles/Doubles) →
+   Status (Live/Finished/Upcoming); Matches nach Turnier gruppiert.
    Datenquelle: öffentliches ESPN-Scoreboard-JSON (sendet CORS "*",
    daher direkt aus dem Browser abrufbar – kein Server nötig).
    ===================================================================== */
@@ -256,8 +251,16 @@ const API = {
 };
 const REFRESH_MS = 60_000; // automatische Aktualisierung der aktiven Tour
 
+// Auswahl aus dem letzten Besuch wiederherstellen (ungültige Werte ignorieren)
+function restore(key, allowed, fallback) {
+  const v = localStorage.getItem(key);
+  return allowed.includes(v) ? v : fallback;
+}
+
 const state = {
-  tour: localStorage.getItem('tour') === 'wta' ? 'wta' : 'atp',
+  tour: restore('tour', ['atp', 'wta'], 'atp'),
+  discipline: restore('discipline', ['singles', 'doubles'], 'singles'),
+  status: restore('status', ['in', 'post', 'pre'], 'in'),
   data: { atp: null, wta: null },       // zuletzt geladene Rohdaten je Tour
   fetchedAt: { atp: 0, wta: 0 },        // Zeitstempel der letzten Aktualisierung
   loading: false,
@@ -273,72 +276,40 @@ function esc(s) {
   }[c]));
 }
 
-const fmtTime = new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
-const fmtDay = new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', weekday: 'short', day: '2-digit', month: '2-digit' });
-const fmtClock = new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const fmtTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
+const fmtDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Berlin', weekday: 'short', day: 'numeric', month: 'short' });
+const fmtClock = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-// Startzeit eines angesetzten Matches anzeigen ("14:30" heute, sonst mit Datum)
+// Startzeit eines angesetzten Matches ("14:30" heute, sonst mit Datum)
 function formatStart(dateStr, timeValid) {
   if (!dateStr) return '';
   const d = new Date(dateStr);
   if (isNaN(d)) return '';
   const sameDay = fmtDay.format(d) === fmtDay.format(new Date());
-  if (timeValid === false) return sameDay ? 'heute, Zeit offen' : fmtDay.format(d) + ', Zeit offen';
-  return sameDay ? fmtTime.format(d) + ' Uhr' : fmtDay.format(d) + ', ' + fmtTime.format(d);
+  if (timeValid === false) return sameDay ? 'today, time TBC' : fmtDay.format(d) + ', time TBC';
+  return sameDay ? fmtTime.format(d) : fmtDay.format(d) + ', ' + fmtTime.format(d);
 }
 
-// ESPN-Statustexte eindeutschen; Unbekanntes bleibt im Original sichtbar
-function translateStatus(type) {
-  const detail = type?.detail || type?.description || '';
-  let m = detail.match(/^(\d+)(?:st|nd|rd|th) Set$/);
-  if (m) return m[1] + '. Satz';
-  const map = {
-    'Final': 'Beendet', 'In Progress': 'Live', 'Scheduled': 'Geplant',
-    'Suspended': 'Unterbrochen', 'Delayed': 'Verzögert',
-    'Postponed': 'Verschoben', 'Canceled': 'Abgesagt', 'Cancelled': 'Abgesagt',
-    'Walkover': 'Walkover',
-  };
-  if (map[detail]) return map[detail];
-  if (/retired/i.test(detail)) return 'Beendet (Aufgabe)';
-  return detail;
-}
-
-// Rundennamen eindeutschen
-function translateRound(name) {
+// Rundennamen in britische Schreibweise bringen
+function roundLabel(name) {
   if (!name) return '';
-  const map = {
-    'Final': 'Finale',
-    'Semifinal': 'Halbfinale', 'Semifinals': 'Halbfinale',
-    'Quarterfinal': 'Viertelfinale', 'Quarterfinals': 'Viertelfinale',
-    'Round of 16': 'Achtelfinale', 'Qualifying Final': 'Qualifikation, Finale',
-  };
-  if (map[name]) return map[name];
-  let m = name.match(/^Round (\d+)$/);
-  if (m) return m[1] + '. Runde';
-  m = name.match(/^(\d+)(?:st|nd|rd|th) Round$/);
-  if (m) return m[1] + '. Runde';
-  m = name.match(/^Qualifying (\d+)(?:st|nd|rd|th) Round$/);
-  if (m) return 'Qualifikation, ' + m[1] + '. Runde';
-  m = name.match(/^Round of (\d+)$/);
-  if (m) return 'Runde der letzten ' + m[1];
-  return name;
+  return name.replace(/Quarterfinal/g, 'Quarter-final').replace(/Semifinal/g, 'Semi-final');
 }
 
-// Konkurrenz-Namen eindeutschen ("Men's Singles" → "Herreneinzel")
-function translateGrouping(name) {
-  const map = {
-    "Men's Singles": 'Herreneinzel', "Women's Singles": 'Dameneinzel',
-    "Men's Doubles": 'Herrendoppel', "Women's Doubles": 'Damendoppel',
-    'Mixed Doubles': 'Mixed',
-  };
-  return map[name] || name || '';
+// Zusatz-Status für beendete Matches (nur Besonderheiten wie Aufgabe)
+function finishedNote(type) {
+  const d = type?.detail || '';
+  if (/retired/i.test(d)) return 'Retired';
+  if (/walkover/i.test(d)) return 'Walkover';
+  if (/default/i.test(d)) return 'Defaulted';
+  return '';
 }
 
 // Name eines Teilnehmers (Einzel: "athlete", Doppel-Team: "roster")
 function compName(comp) {
-  if (comp?.athlete) return comp.athlete.shortName || comp.athlete.displayName || 'N. N.';
-  if (comp?.roster) return comp.roster.shortDisplayName || comp.roster.displayName || 'N. N.';
-  return 'N. N.';
+  if (comp?.athlete) return comp.athlete.shortName || comp.athlete.displayName || 'TBC';
+  if (comp?.roster) return comp.roster.shortDisplayName || comp.roster.displayName || 'TBC';
+  return 'TBC';
 }
 
 // Flaggen eines Teilnehmers (beim Doppel: beide Spielerinnen/Spieler)
@@ -369,11 +340,53 @@ async function refresh(tour = state.tour) {
     state.error = null;
   } catch (e) {
     // Fehler deutlich anzeigen, aber die letzten bekannten Daten stehen lassen
-    state.error = 'Aktualisierung fehlgeschlagen (' + e.message + ')';
+    state.error = 'Update failed (' + e.message + ')';
   }
   state.loading = false;
-  updateChrome();
   if (tour === state.tour) render();
+  updateChrome();
+}
+
+/* ---------- Filterung ---------- */
+
+// Konkurrenzen nach Tour filtern: kombinierte Turniere (z. B. Libéma Open)
+// tauchen in beiden Feeds mit allen Konkurrenzen auf
+function belongsToTour(name, tour) {
+  if (tour === 'atp') return !/^Women's/.test(name || '');
+  return !/^Men's/.test(name || '');
+}
+
+// Disziplin-Filter; Mixed Doubles zählt zu Doubles
+function belongsToDiscipline(name, discipline) {
+  if (discipline === 'singles') return /Singles/.test(name || '');
+  return /Doubles/.test(name || '');
+}
+
+// Matches der aktuellen Auswahl sammeln, nach Turnier gruppiert.
+// Rückgabe: null solange keine Daten geladen sind
+function matchesFor(tour, discipline, status) {
+  const d = state.data[tour];
+  if (!d) return null;
+  const groups = [];
+  for (const ev of d.events || []) {
+    const matches = [];
+    for (const g of ev.groupings || []) {
+      const gname = g.grouping?.displayName || '';
+      if (!belongsToTour(gname, tour)) continue;
+      if (!belongsToDiscipline(gname, discipline)) continue;
+      const mixed = /^Mixed/.test(gname);
+      for (const c of g.competitions || []) {
+        if (c.status?.type?.state !== status) continue;
+        matches.push({ c, mixed });
+      }
+    }
+    // Beendete: Neueste zuerst; Live/Anstehende: Früheste zuerst
+    matches.sort((a, b) => status === 'post'
+      ? new Date(b.c.date) - new Date(a.c.date)
+      : new Date(a.c.date) - new Date(b.c.date));
+    if (matches.length) groups.push({ ev, matches });
+  }
+  return groups;
 }
 
 /* ---------- Darstellung ---------- */
@@ -403,106 +416,91 @@ function rowHtml(comp, status) {
     '</div>';
 }
 
-function matchHtml(c) {
+function matchHtml({ c, mixed }) {
   const st = c.status || {};
   const stateCode = st.type?.state;
-  const round = translateRound(c.round?.displayName);
-  let statusLabel;
+  const parts = [];
+  if (mixed) parts.push('Mixed');
+  const round = roundLabel(c.round?.displayName);
+  if (round) parts.push(esc(round));
   if (stateCode === 'in') {
-    statusLabel = '<span class="live-badge"><span class="live-dot"></span>LIVE · ' + esc(translateStatus(st.type)) + '</span>';
+    parts.push('<span class="live-badge"><span class="live-dot"></span>LIVE · ' + esc(st.type?.detail || '') + '</span>');
   } else if (stateCode === 'pre') {
-    statusLabel = esc(formatStart(c.date, c.timeValid));
+    parts.push(esc(formatStart(c.date, c.timeValid)));
   } else {
-    statusLabel = esc(translateStatus(st.type));
+    const note = finishedNote(st.type);
+    if (note) parts.push(esc(note));
   }
   const comps = (c.competitors || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
   return '<div class="match">' +
-    '<div class="match-meta">' + (round ? esc(round) + ' · ' : '') + statusLabel + '</div>' +
+    '<div class="match-meta">' + parts.join(' · ') + '</div>' +
     comps.map((comp) => rowHtml(comp, st)).join('') +
     '</div>';
 }
 
-// Konkurrenzen nach Tour filtern: kombinierte Turniere (z. B. Libéma Open)
-// tauchen in beiden Feeds mit allen Konkurrenzen auf
-function groupingBelongsToTour(name, tour) {
-  if (tour === 'atp') return !/^Women's/.test(name || '');
-  return !/^Men's/.test(name || '');
-}
-
-function groupingHtml(g) {
-  const name = g.grouping?.displayName || '';
-  const comps = g.competitions || [];
-  const live = comps.filter((c) => c.status?.type?.state === 'in');
-  const post = comps.filter((c) => c.status?.type?.state === 'post')
-    .sort((a, b) => new Date(b.date) - new Date(a.date)); // Neueste zuerst
-  const pre = comps.filter((c) => c.status?.type?.state === 'pre')
-    .sort((a, b) => new Date(a.date) - new Date(b.date)); // Nächste zuerst
-  if (!live.length && !post.length && !pre.length) return '';
-
-  let html = '<div class="grouping"><h3>' + esc(translateGrouping(name)) + '</h3>';
-  html += live.map(matchHtml).join('');
-  if (post.length) {
-    // Live-Matches immer sichtbar; Ergebnisse standardmäßig aufgeklappt,
-    // sobald es keine Live-Matches gibt – sonst eingeklappt
-    html += '<details' + (live.length ? '' : ' open') + '><summary>Beendet (' + post.length + ')</summary>' +
-      post.map(matchHtml).join('') + '</details>';
-  }
-  if (pre.length) {
-    html += '<details><summary>Anstehend (' + pre.length + ')</summary>' +
-      pre.map(matchHtml).join('') + '</details>';
-  }
-  return html + '</div>';
-}
-
-function tournamentHtml(ev, tour) {
-  const groupings = (ev.groupings || [])
-    .filter((g) => groupingBelongsToTour(g.grouping?.displayName, tour));
-  const inner = groupings.map(groupingHtml).join('');
-  if (!inner) return '';
+function tournamentHtml({ ev, matches }) {
   const venue = ev.venue?.fullName || '';
   return '<section class="tournament">' +
-    '<h2>' + esc(ev.name || 'Turnier') + '</h2>' +
+    '<h2>' + esc(ev.name || 'Tournament') + '</h2>' +
     (venue ? '<div class="venue">' + esc(venue) + '</div>' : '') +
-    inner + '</section>';
+    matches.map(matchHtml).join('') +
+    '</section>';
 }
+
+const EMPTY = {
+  in: 'No live matches at the moment.',
+  post: 'No finished matches yet.',
+  pre: 'No upcoming matches scheduled.',
+};
 
 function render() {
   const content = document.getElementById('content');
-  const d = state.data[state.tour];
-  if (!d) {
-    content.innerHTML = '<div class="hint">' + (state.error ? esc(state.error) : 'Lade Spielstände …') + '</div>';
+  const groups = matchesFor(state.tour, state.discipline, state.status);
+  if (groups === null) {
+    content.innerHTML = '<div class="hint">' + (state.error ? esc(state.error) : 'Loading scores …') + '</div>';
     return;
   }
-  const html = (d.events || []).map((ev) => tournamentHtml(ev, state.tour)).join('');
-  content.innerHTML = html || '<div class="hint">Zurzeit keine laufenden Turniere.</div>';
+  content.innerHTML = groups.length
+    ? groups.map(tournamentHtml).join('')
+    : '<div class="hint">' + EMPTY[state.status] + '</div>';
 }
 
-// Kopfzeile: Tabs, Lade-Anzeige, Zeitstempel, Fehler
+// Kopfzeile: aktive Schalter, Live-Zähler, Lade-Anzeige, Zeitstempel, Fehler
 function updateChrome() {
-  document.querySelectorAll('.tab').forEach((b) => {
-    b.classList.toggle('active', b.dataset.tour === state.tour);
+  document.querySelectorAll('.seg').forEach((seg) => {
+    const key = seg.dataset.key;
+    seg.querySelectorAll('button').forEach((b) => {
+      b.classList.toggle('active', b.dataset.val === state[key]);
+    });
   });
+  // Anzahl der Live-Matches der aktuellen Tour/Disziplin im Live-Tab anzeigen
+  const liveGroups = matchesFor(state.tour, state.discipline, 'in');
+  const n = liveGroups ? liveGroups.reduce((s, g) => s + g.matches.length, 0) : 0;
+  document.getElementById('liveTab').innerHTML = 'Live' + (n ? ' <span class="count">' + n + '</span>' : '');
+
   document.getElementById('refreshBtn').classList.toggle('spinning', state.loading);
   const status = document.getElementById('status');
   const ts = state.fetchedAt[state.tour];
-  let html = ts ? 'Aktualisiert um ' + fmtClock.format(new Date(ts)) : '';
+  let html = ts ? 'Updated ' + fmtClock.format(new Date(ts)) : '';
   if (state.error) html += (html ? ' · ' : '') + '<span class="error">' + esc(state.error) + '</span>';
   status.innerHTML = html;
 }
 
 /* ---------- Interaktion ---------- */
 
-function switchTour(tour) {
-  state.tour = tour;
-  localStorage.setItem('tour', tour);
+function select(key, val) {
+  state[key] = val;
+  localStorage.setItem(key, val);
   updateChrome();
   render();
-  // Beim Wechsel nachladen, falls die Daten fehlen oder veraltet sind
-  if (!state.data[tour] || Date.now() - state.fetchedAt[tour] > REFRESH_MS) refresh(tour);
+  // Beim Tour-Wechsel nachladen, falls die Daten fehlen oder veraltet sind
+  if (key === 'tour' && (!state.data[val] || Date.now() - state.fetchedAt[val] > REFRESH_MS)) {
+    refresh(val);
+  }
 }
 
-document.querySelectorAll('.tab').forEach((b) => {
-  b.addEventListener('click', () => switchTour(b.dataset.tour));
+document.querySelectorAll('.seg button').forEach((b) => {
+  b.addEventListener('click', () => select(b.closest('.seg').dataset.key, b.dataset.val));
 });
 document.getElementById('refreshBtn').addEventListener('click', () => refresh());
 
