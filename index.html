@@ -188,6 +188,16 @@
     color: var(--muted);
   }
 
+  /* Kleine Zwischenüberschrift je Runde innerhalb eines Turniers */
+  .round-h {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--muted);
+    font-weight: 700;
+    margin: 8px 4px 5px;
+  }
+
   /* ---------- Einzelnes Match ---------- */
   .match {
     background: var(--card-inner);
@@ -420,14 +430,14 @@ function belongsToDiscipline(name, discipline) {
   return /Doubles/.test(name || '');
 }
 
-// Matches der aktuellen Auswahl sammeln, nach Turnier gruppiert.
-// Rückgabe: null solange keine Daten geladen sind
+// Matches der aktuellen Auswahl sammeln, nach Turnier und darin nach
+// Runde gruppiert. Rückgabe: null solange keine Daten geladen sind
 function matchesFor(tour, discipline, status) {
   const d = state.data[tour];
   if (!d) return null;
   const groups = [];
   for (const ev of d.events || []) {
-    const matches = [];
+    const byRound = new Map(); // Rundenname -> Matches
     for (const g of ev.groupings || []) {
       const gname = g.grouping?.displayName || '';
       if (!belongsToTour(gname, tour)) continue;
@@ -435,14 +445,25 @@ function matchesFor(tour, discipline, status) {
       const mixed = /^Mixed/.test(gname);
       for (const c of g.competitions || []) {
         if (c.status?.type?.state !== status) continue;
-        matches.push({ c, mixed });
+        const rname = c.round?.displayName || '';
+        if (!byRound.has(rname)) byRound.set(rname, []);
+        byRound.get(rname).push({ c, mixed });
       }
     }
     // Beendete: Neueste zuerst; Live/Anstehende: Früheste zuerst
-    matches.sort((a, b) => status === 'post'
-      ? new Date(b.c.date) - new Date(a.c.date)
-      : new Date(a.c.date) - new Date(b.c.date));
-    if (matches.length) groups.push({ ev, matches });
+    const rounds = [...byRound.entries()].map(([name, matches]) => {
+      matches.sort((a, b) => status === 'post'
+        ? new Date(b.c.date) - new Date(a.c.date)
+        : new Date(a.c.date) - new Date(b.c.date));
+      return { name, matches };
+    });
+    // Runden zeitlich ordnen (erstes Match ist nach obiger Sortierung
+    // der Anker): Beendete – zuletzt gespielte Runde zuerst,
+    // sonst – als Nächstes gespielte Runde zuerst
+    rounds.sort((a, b) => status === 'post'
+      ? new Date(b.matches[0].c.date) - new Date(a.matches[0].c.date)
+      : new Date(a.matches[0].c.date) - new Date(b.matches[0].c.date));
+    if (rounds.length) groups.push({ ev, rounds });
   }
   return groups;
 }
@@ -479,9 +500,8 @@ function matchHtml({ c, mixed }) {
   const stateCode = st.type?.state;
   const parts = [];
   if (mixed) parts.push('Mixed');
-  const round = roundLabel(c.round?.displayName);
-  if (round) parts.push(esc(round));
-  // Court des Matches (im Feed teils leer, dann weglassen)
+  // Court des Matches (im Feed teils leer, dann weglassen);
+  // die Runde steht als Zwischenüberschrift über der Gruppe
   const court = (c.venue?.court || '').trim();
   if (court) parts.push(esc(court));
   if (stateCode === 'in') {
@@ -494,17 +514,21 @@ function matchHtml({ c, mixed }) {
   }
   const comps = (c.competitors || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
   return '<div class="match">' +
-    '<div class="match-meta">' + parts.join(' · ') + '</div>' +
+    (parts.length ? '<div class="match-meta">' + parts.join(' · ') + '</div>' : '') +
     comps.map((comp) => rowHtml(comp, st)).join('') +
     '</div>';
 }
 
-function tournamentHtml({ ev, matches }) {
+function tournamentHtml({ ev, rounds }) {
   const venue = ev.venue?.fullName || '';
+  const body = rounds.map(({ name, matches }) =>
+    (name ? '<h3 class="round-h">' + esc(roundLabel(name)) + '</h3>' : '') +
+    matches.map(matchHtml).join('')
+  ).join('');
   return '<section class="tournament">' +
     '<h2>' + esc(ev.name || 'Tournament') + '</h2>' +
     (venue ? '<div class="venue">' + esc(venue) + '</div>' : '') +
-    matches.map(matchHtml).join('') +
+    body +
     '</section>';
 }
 
@@ -536,7 +560,9 @@ function updateChrome() {
   });
   // Anzahl der Live-Matches der aktuellen Tour/Disziplin im Live-Tab anzeigen
   const liveGroups = matchesFor(state.tour, state.discipline, 'in');
-  const n = liveGroups ? liveGroups.reduce((s, g) => s + g.matches.length, 0) : 0;
+  const n = liveGroups
+    ? liveGroups.reduce((s, g) => s + g.rounds.reduce((t, r) => t + r.matches.length, 0), 0)
+    : 0;
   document.getElementById('liveTab').innerHTML = 'Live' + (n ? ' <span class="count">' + n + '</span>' : '');
 
   document.getElementById('refreshBtn').classList.toggle('spinning', state.loading);

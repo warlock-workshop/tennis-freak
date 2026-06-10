@@ -13,8 +13,9 @@ HTML-Datei plus App-Icon. Oberfläche auf **britischem Englisch**.
   „Liquid-Glass"-Leiste; der Live-Tab zeigt die Anzahl laufender
   Matches der aktuellen Auswahl
 
-Dazwischen die Matches, **nach Turnier gruppiert**. Die zuletzt gewählte
-Ansicht wird gemerkt.
+Dazwischen die Matches, **nach Turnier gruppiert** und innerhalb des
+Turniers **nach Runden** mit kleinen Zwischenüberschriften. Die zuletzt
+gewählte Ansicht wird gemerkt.
 
 ## Funktionen
 
