@@ -82,7 +82,7 @@
     justify-content: space-between;
     gap: 8px;
   }
-  h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: 0.2px; }
+  h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
   h1 .ball { color: var(--accent); }
 
   /* Disziplin-Wahl: dezente Text-Tabs, die mit dem Header verschmelzen */
@@ -250,6 +250,7 @@
   }
   .name.winner { color: var(--text); font-weight: 700; }
   .name.playing { color: var(--text); }
+  .seed { color: var(--muted); font-size: 11.5px; font-weight: 400; }
 
   .sets { display: flex; gap: 2px; flex: none; }
   .set {
@@ -488,9 +489,12 @@ function rowHtml(comp, status) {
     '<img class="flag" loading="lazy" src="' + esc(f.href) + '" alt="' + esc(f.alt || '') + '">'
   ).join('');
   const nameCls = comp?.winner ? 'name winner' : (live ? 'name playing' : 'name');
+  // Setzlisten-Nummer in Klammern (ESPN: curatedRank.current, 99 = ungesetzt)
+  const seed = comp?.curatedRank?.current;
+  const seedHtml = seed >= 1 && seed < 99 ? ' <span class="seed">(' + seed + ')</span>' : '';
   return '<div class="row">' +
     '<span class="flagwrap">' + flags + '</span>' +
-    '<span class="' + nameCls + '">' + esc(compName(comp)) + '</span>' +
+    '<span class="' + nameCls + '">' + esc(compName(comp)) + seedHtml + '</span>' +
     '<span class="sets">' + setsHtml(comp, status) + '</span>' +
     '</div>';
 }
