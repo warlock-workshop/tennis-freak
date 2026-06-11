@@ -282,6 +282,7 @@
   .name.winner { color: var(--text); font-weight: 700; }
   .name.playing { color: var(--text); }
   .seed { color: var(--muted); font-size: 11.5px; font-weight: 400; }
+  .serve { color: var(--accent); font-size: 9px; vertical-align: 1px; }
 
   .sets { display: flex; gap: 2px; flex: none; }
   .set {
@@ -550,9 +551,12 @@ function rowHtml(comp, status) {
   // Setzlisten-Nummer in Klammern (ESPN: curatedRank.current, 99 = ungesetzt)
   const seed = comp?.curatedRank?.current;
   const seedHtml = seed >= 1 && seed < 99 ? ' <span class="seed">(' + seed + ')</span>' : '';
+  // Aufschlag-Indikator: possession markiert bei Live-Matches den Aufschläger
+  const serveHtml = live && comp?.possession === true
+    ? ' <span class="serve" title="Serving">●</span>' : '';
   return '<div class="row">' +
     '<span class="flagwrap">' + flags + '</span>' +
-    '<span class="' + nameCls + '">' + esc(compName(comp)) + seedHtml + '</span>' +
+    '<span class="' + nameCls + '">' + esc(compName(comp)) + seedHtml + serveHtml + '</span>' +
     '<span class="sets">' + setsHtml(comp, status) + '</span>' +
     '</div>';
 }
