@@ -213,6 +213,12 @@
     font-weight: 700;
     margin: 12px 4px 6px;
   }
+  /* Datums-Zwischenüberschrift einzelner Tage unter "Last 7 days" */
+  .day-h.sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin: 6px 4px 5px;
+  }
 
   .tournament {
     background: var(--card);
@@ -402,6 +408,7 @@ function esc(s) {
 
 const fmtTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
 const fmtISODay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' });
+const fmtSubDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Berlin', weekday: 'long', day: 'numeric', month: 'long' });
 const fmtDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Berlin', weekday: 'short', day: 'numeric', month: 'short' });
 const fmtClock = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -422,23 +429,19 @@ function dayDiff(dateStr) {
   return Math.round((day - today) / 86_400_000);
 }
 
-// Tages-Eimer je Ansicht; Reihenfolge = Anzeige-Reihenfolge
-const BUCKETS = {
-  post: ['Today', 'Yesterday', 'Last 7 days', 'Earlier'],
-  pre: ['Today', 'Tomorrow', 'Later'],
-};
-
-function bucketFor(status, dateStr) {
+// Tages-Eimer-Schlüssel je Match; 'd:YYYY-MM-DD' = einzelner Tag
+// innerhalb von "Last 7 days" (bekommt eine Datums-Zwischenüberschrift)
+function bucketKey(status, dateStr) {
   const diff = dayDiff(dateStr);
   if (status === 'post') {
-    if (diff >= 0) return 0;   // Today
-    if (diff === -1) return 1; // Yesterday
-    if (diff >= -7) return 2;  // Last 7 days
-    return 3;                  // Earlier
+    if (diff >= 0) return 'today';
+    if (diff === -1) return 'yesterday';
+    if (diff >= -7) return 'd:' + fmtISODay.format(new Date(dateStr));
+    return 'earlier';
   }
-  if (diff <= 0) return 0;     // Today (auch verspätete von heute)
-  if (diff === 1) return 1;    // Tomorrow
-  return 2;                    // Later
+  if (diff <= 0) return 'today';     // auch verspätete von heute
+  if (diff === 1) return 'tomorrow';
+  return 'later';
 }
 
 // Rundennamen in britische Schreibweise bringen
@@ -538,11 +541,10 @@ function belongsToDiscipline(name, discipline) {
 function matchesFor(tour, discipline, status) {
   const d = state.data[tour];
   if (!d) return null;
-  const labels = BUCKETS[status] || [''];
-  const buckets = labels.map((label) => ({ label, groups: [] }));
+  const byKey = new Map(); // Eimer-Schlüssel -> [{ev, rounds}]
   for (const ev of d.events || []) {
     // je Tages-Eimer: Rundenname -> Matches dieses Turniers
-    const perBucket = buckets.map(() => new Map());
+    const perKey = new Map();
     for (const g of ev.groupings || []) {
       const gname = g.grouping?.displayName || '';
       if (!belongsToTour(gname, tour)) continue;
@@ -550,14 +552,15 @@ function matchesFor(tour, discipline, status) {
       const mixed = /^Mixed/.test(gname);
       for (const c of g.competitions || []) {
         if (c.status?.type?.state !== status) continue;
-        const byRound = perBucket[status === 'in' ? 0 : bucketFor(status, c.date)];
+        const key = status === 'in' ? '' : bucketKey(status, c.date);
+        if (!perKey.has(key)) perKey.set(key, new Map());
+        const byRound = perKey.get(key);
         const rname = c.round?.displayName || '';
         if (!byRound.has(rname)) byRound.set(rname, []);
         byRound.get(rname).push({ c, mixed });
       }
     }
-    perBucket.forEach((byRound, i) => {
-      if (!byRound.size) return;
+    for (const [key, byRound] of perKey) {
       // Beendete: Neueste zuerst; Live/Anstehende: Früheste zuerst
       const rounds = [...byRound.entries()].map(([name, matches]) => {
         matches.sort((a, b) => status === 'post'
@@ -571,10 +574,32 @@ function matchesFor(tour, discipline, status) {
       rounds.sort((a, b) => status === 'post'
         ? new Date(b.matches[0].c.date) - new Date(a.matches[0].c.date)
         : new Date(a.matches[0].c.date) - new Date(b.matches[0].c.date));
-      buckets[i].groups.push({ ev, rounds });
-    });
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key).push({ ev, rounds });
+    }
   }
-  return buckets.filter((b) => b.groups.length);
+
+  // Eimer in Anzeige-Reihenfolge bringen
+  const out = [];
+  const push = (key, label, sub) => {
+    if (byKey.has(key)) out.push({ label, sub: !!sub, groups: byKey.get(key) });
+  };
+  if (status === 'post') {
+    push('today', 'Today');
+    push('yesterday', 'Yesterday');
+    // Einzeltage der letzten Woche, neueste zuerst, mit Datums-Überschrift
+    const dayKeys = [...byKey.keys()].filter((k) => k.startsWith('d:')).sort().reverse();
+    if (dayKeys.length) out.push({ label: 'Last 7 days', header: true, groups: [] });
+    for (const k of dayKeys) push(k, fmtSubDay.format(new Date(k.slice(2))), true);
+    push('earlier', 'Earlier');
+  } else if (status === 'pre') {
+    push('today', 'Today');
+    push('tomorrow', 'Tomorrow');
+    push('later', 'Later');
+  } else {
+    push('', '');
+  }
+  return out;
 }
 
 /* ---------- Darstellung ---------- */
@@ -706,7 +731,7 @@ function render() {
   }
   content.innerHTML = buckets.length
     ? buckets.map((b) =>
-        (b.label ? '<h2 class="day-h">' + b.label + '</h2>' : '') +
+        (b.label ? '<h2 class="day-h' + (b.sub ? ' sub' : '') + '">' + b.label + '</h2>' : '') +
         b.groups.map(tournamentHtml).join('')
       ).join('')
     : '<div class="hint">' + EMPTY[state.status] + '</div>';
