@@ -16,9 +16,10 @@ HTML-Datei plus App-Icon. Oberfläche auf **britischem Englisch**.
   und Trend-Pfeilen; Singles/Doubles blendet sich dort aus, da der Feed
   nur Einzel-Ranglisten liefert
 
-Dazwischen die Matches, **nach Turnier gruppiert** und innerhalb des
-Turniers **nach Runden** mit kleinen Zwischenüberschriften. Die zuletzt
-gewählte Ansicht wird gemerkt.
+Dazwischen die Matches: In Finished/Upcoming zuerst **nach Tagen**
+(Today, Yesterday/Tomorrow, …), darin **nach Turnier** und innerhalb
+des Turniers **nach Runden** mit kleinen Zwischenüberschriften.
+Die zuletzt gewählte Ansicht wird gemerkt.
 
 ## Funktionen
 

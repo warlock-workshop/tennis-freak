@@ -204,6 +204,16 @@
   }
   .hint { color: var(--muted); text-align: center; padding: 36px 16px; }
 
+  /* Tages-Überschrift über den Turnier-Karten (Finished/Upcoming) */
+  .day-h {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--accent);
+    font-weight: 700;
+    margin: 12px 4px 6px;
+  }
+
   .tournament {
     background: var(--card);
     border: 1px solid var(--border);
@@ -391,6 +401,7 @@ function esc(s) {
 }
 
 const fmtTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
+const fmtISODay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' });
 const fmtDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Berlin', weekday: 'short', day: 'numeric', month: 'short' });
 const fmtClock = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -402,6 +413,32 @@ function formatStart(dateStr, timeValid) {
   const sameDay = fmtDay.format(d) === fmtDay.format(new Date());
   if (timeValid === false) return sameDay ? 'today, time TBC' : fmtDay.format(d) + ', time TBC';
   return sameDay ? fmtTime.format(d) : fmtDay.format(d) + ', ' + fmtTime.format(d);
+}
+
+// Kalendertage-Differenz zu heute (deutsche Zeit); < 0 = Vergangenheit
+function dayDiff(dateStr) {
+  const day = Date.parse(fmtISODay.format(new Date(dateStr)));
+  const today = Date.parse(fmtISODay.format(new Date()));
+  return Math.round((day - today) / 86_400_000);
+}
+
+// Tages-Eimer je Ansicht; Reihenfolge = Anzeige-Reihenfolge
+const BUCKETS = {
+  post: ['Today', 'Yesterday', 'Last 7 days', 'Earlier'],
+  pre: ['Today', 'Tomorrow', 'Later'],
+};
+
+function bucketFor(status, dateStr) {
+  const diff = dayDiff(dateStr);
+  if (status === 'post') {
+    if (diff >= 0) return 0;   // Today
+    if (diff === -1) return 1; // Yesterday
+    if (diff >= -7) return 2;  // Last 7 days
+    return 3;                  // Earlier
+  }
+  if (diff <= 0) return 0;     // Today (auch verspätete von heute)
+  if (diff === 1) return 1;    // Tomorrow
+  return 2;                    // Later
 }
 
 // Rundennamen in britische Schreibweise bringen
@@ -495,14 +532,17 @@ function belongsToDiscipline(name, discipline) {
   return /Doubles/.test(name || '');
 }
 
-// Matches der aktuellen Auswahl sammeln, nach Turnier und darin nach
-// Runde gruppiert. Rückgabe: null solange keine Daten geladen sind
+// Matches der aktuellen Auswahl sammeln: nach Tag (heute/gestern/…),
+// darin nach Turnier und Runde gruppiert. Live hat nur einen Eimer
+// ohne Tages-Überschrift. Rückgabe: null solange keine Daten da sind
 function matchesFor(tour, discipline, status) {
   const d = state.data[tour];
   if (!d) return null;
-  const groups = [];
+  const labels = BUCKETS[status] || [''];
+  const buckets = labels.map((label) => ({ label, groups: [] }));
   for (const ev of d.events || []) {
-    const byRound = new Map(); // Rundenname -> Matches
+    // je Tages-Eimer: Rundenname -> Matches dieses Turniers
+    const perBucket = buckets.map(() => new Map());
     for (const g of ev.groupings || []) {
       const gname = g.grouping?.displayName || '';
       if (!belongsToTour(gname, tour)) continue;
@@ -510,27 +550,31 @@ function matchesFor(tour, discipline, status) {
       const mixed = /^Mixed/.test(gname);
       for (const c of g.competitions || []) {
         if (c.status?.type?.state !== status) continue;
+        const byRound = perBucket[status === 'in' ? 0 : bucketFor(status, c.date)];
         const rname = c.round?.displayName || '';
         if (!byRound.has(rname)) byRound.set(rname, []);
         byRound.get(rname).push({ c, mixed });
       }
     }
-    // Beendete: Neueste zuerst; Live/Anstehende: Früheste zuerst
-    const rounds = [...byRound.entries()].map(([name, matches]) => {
-      matches.sort((a, b) => status === 'post'
-        ? new Date(b.c.date) - new Date(a.c.date)
-        : new Date(a.c.date) - new Date(b.c.date));
-      return { name, matches };
+    perBucket.forEach((byRound, i) => {
+      if (!byRound.size) return;
+      // Beendete: Neueste zuerst; Live/Anstehende: Früheste zuerst
+      const rounds = [...byRound.entries()].map(([name, matches]) => {
+        matches.sort((a, b) => status === 'post'
+          ? new Date(b.c.date) - new Date(a.c.date)
+          : new Date(a.c.date) - new Date(b.c.date));
+        return { name, matches };
+      });
+      // Runden zeitlich ordnen (erstes Match ist nach obiger Sortierung
+      // der Anker): Beendete – zuletzt gespielte Runde zuerst,
+      // sonst – als Nächstes gespielte Runde zuerst
+      rounds.sort((a, b) => status === 'post'
+        ? new Date(b.matches[0].c.date) - new Date(a.matches[0].c.date)
+        : new Date(a.matches[0].c.date) - new Date(b.matches[0].c.date));
+      buckets[i].groups.push({ ev, rounds });
     });
-    // Runden zeitlich ordnen (erstes Match ist nach obiger Sortierung
-    // der Anker): Beendete – zuletzt gespielte Runde zuerst,
-    // sonst – als Nächstes gespielte Runde zuerst
-    rounds.sort((a, b) => status === 'post'
-      ? new Date(b.matches[0].c.date) - new Date(a.matches[0].c.date)
-      : new Date(a.matches[0].c.date) - new Date(b.matches[0].c.date));
-    if (rounds.length) groups.push({ ev, rounds });
   }
-  return groups;
+  return buckets.filter((b) => b.groups.length);
 }
 
 /* ---------- Darstellung ---------- */
@@ -655,13 +699,16 @@ function render() {
     return;
   }
   const content = document.getElementById('content');
-  const groups = matchesFor(state.tour, state.discipline, state.status);
-  if (groups === null) {
+  const buckets = matchesFor(state.tour, state.discipline, state.status);
+  if (buckets === null) {
     content.innerHTML = '<div class="hint">' + (state.error ? esc(state.error) : 'Loading scores …') + '</div>';
     return;
   }
-  content.innerHTML = groups.length
-    ? groups.map(tournamentHtml).join('')
+  content.innerHTML = buckets.length
+    ? buckets.map((b) =>
+        (b.label ? '<h2 class="day-h">' + b.label + '</h2>' : '') +
+        b.groups.map(tournamentHtml).join('')
+      ).join('')
     : '<div class="hint">' + EMPTY[state.status] + '</div>';
 }
 
@@ -674,10 +721,13 @@ function updateChrome() {
     });
   });
   // Anzahl der Live-Matches der aktuellen Tour/Disziplin im Live-Tab anzeigen
-  const liveGroups = matchesFor(state.tour, state.discipline, 'in');
-  const n = liveGroups
-    ? liveGroups.reduce((s, g) => s + g.rounds.reduce((t, r) => t + r.matches.length, 0), 0)
-    : 0;
+  const liveBuckets = matchesFor(state.tour, state.discipline, 'in') || [];
+  let n = 0;
+  for (const b of liveBuckets) {
+    for (const g of b.groups) {
+      for (const r of g.rounds) n += r.matches.length;
+    }
+  }
   document.getElementById('liveTab').innerHTML = 'Live' + (n ? ' <span class="count">' + n + '</span>' : '');
 
   // Singles/Doubles greift in der Rankings-Ansicht nicht (Feed hat nur Einzel)
