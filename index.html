@@ -280,6 +280,8 @@
     animation: pulse 1.4s ease-in-out infinite;
   }
   @keyframes pulse { 50% { opacity: 0.25; } }
+  /* Unterbrochene Matches (Regen/Dunkelheit): ruhiger Hinweis statt LIVE-Puls */
+  .susp-badge { color: #f0b13c; font-weight: 700; }
 
   .row {
     display: flex;
@@ -459,6 +461,19 @@ function finishedNote(type) {
   return '';
 }
 
+// Unterbrochene Matches erkennen – ESPN sortiert sie falsch ein:
+// am Abend als 'post' mit completed=false ("Suspended"), nach der
+// Neuansetzung wieder als 'pre' mit den Linescores der bereits
+// gespielten Sätze (wasSuspended bleibt dabei sogar false).
+// Der Text-Check fängt zusätzlich Varianten wie "Rain Delay" ab.
+function isSuspended(c) {
+  const t = c.status?.type || {};
+  if (/suspend|delay/i.test((t.description || '') + ' ' + (t.detail || ''))) return true;
+  if (t.state === 'post' && t.completed === false) return true;
+  if (t.state === 'pre' && (c.competitors || []).some((x) => (x.linescores || []).length)) return true;
+  return false;
+}
+
 // Name eines Teilnehmers (Einzel: "athlete", Doppel-Team: "roster")
 function compName(comp) {
   if (comp?.athlete) return comp.athlete.shortName || comp.athlete.displayName || 'TBC';
@@ -551,7 +566,9 @@ function matchesFor(tour, discipline, status) {
       if (!belongsToDiscipline(gname, discipline)) continue;
       const mixed = /^Mixed/.test(gname);
       for (const c of g.competitions || []) {
-        if (c.status?.type?.state !== status) continue;
+        // Unterbrochene Matches laufen unabhängig vom ESPN-State unter "Live"
+        const effState = isSuspended(c) ? 'in' : c.status?.type?.state;
+        if (effState !== status) continue;
         const key = status === 'in' ? '' : bucketKey(status, c.date);
         if (!perKey.has(key)) perKey.set(key, new Map());
         const byRound = perKey.get(key);
@@ -604,8 +621,7 @@ function matchesFor(tour, discipline, status) {
 
 /* ---------- Darstellung ---------- */
 
-function setsHtml(comp, status) {
-  const live = status?.type?.state === 'in';
+function setsHtml(comp, status, live) {
   const curIdx = (status?.period || 0) - 1; // laufender Satz (1-basiert)
   const ls = comp?.linescores || [];
   return ls.map((s, i) => {
@@ -616,8 +632,9 @@ function setsHtml(comp, status) {
   }).join('');
 }
 
-function rowHtml(comp, status) {
-  const live = status?.type?.state === 'in';
+// live kommt von außen: auch unterbrochene Matches werden "wie live"
+// dargestellt (Namen hell, laufender Satz markiert)
+function rowHtml(comp, status, live) {
   const flags = compFlags(comp).map((f) =>
     '<img class="flag" loading="lazy" src="' + esc(f.href) + '" alt="' + esc(f.alt || '') + '">'
   ).join('');
@@ -631,20 +648,30 @@ function rowHtml(comp, status) {
   return '<div class="row">' +
     '<span class="flagwrap">' + flags + '</span>' +
     '<span class="' + nameCls + '">' + esc(compName(comp)) + seedHtml + serveHtml + '</span>' +
-    '<span class="sets">' + setsHtml(comp, status) + '</span>' +
+    '<span class="sets">' + setsHtml(comp, status, live) + '</span>' +
     '</div>';
 }
 
 function matchHtml({ c, mixed }) {
   const st = c.status || {};
-  const stateCode = st.type?.state;
+  const suspended = isSuspended(c);
+  // Unterbrochene Matches werden wie laufende dargestellt, nur mit
+  // "Suspended"-Hinweis statt LIVE-Badge
+  const stateCode = suspended ? 'in' : st.type?.state;
   const parts = [];
   if (mixed) parts.push('Mixed');
   // Court des Matches (im Feed teils leer, dann weglassen);
   // die Runde steht als Zwischenüberschrift über der Gruppe
   const court = (c.venue?.court || '').trim();
   if (court) parts.push(esc(court));
-  if (stateCode === 'in') {
+  if (suspended) {
+    // Hinweistext aus dem Feed ("Suspended", "Delayed", …); steht das Match
+    // schon wieder als angesetzt im Feed, die Fortsetzungszeit mit anzeigen
+    const d = st.type?.description || '';
+    const label = /scheduled|in progress|^$/i.test(d) ? 'Suspended' : d;
+    const resume = st.type?.state === 'pre' ? formatStart(c.date, c.timeValid) : '';
+    parts.push('<span class="susp-badge">' + esc(label) + (resume ? ' · resumes ' + esc(resume) : '') + '</span>');
+  } else if (stateCode === 'in') {
     parts.push('<span class="live-badge"><span class="live-dot"></span>LIVE · ' + esc(st.type?.detail || '') + '</span>');
   } else if (stateCode === 'pre') {
     parts.push(esc(formatStart(c.date, c.timeValid)));
@@ -655,7 +682,7 @@ function matchHtml({ c, mixed }) {
   const comps = (c.competitors || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
   return '<div class="match">' +
     (parts.length ? '<div class="match-meta">' + parts.join(' · ') + '</div>' : '') +
-    comps.map((comp) => rowHtml(comp, st)).join('') +
+    comps.map((comp) => rowHtml(comp, st, stateCode === 'in')).join('') +
     '</div>';
 }
 
