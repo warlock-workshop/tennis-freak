@@ -24,6 +24,10 @@ Die zuletzt gewählte Ansicht wird gemerkt.
 ## Funktionen
 
 - **Court** jedes Matches in der Infozeile (sofern der Feed ihn liefert)
+- **Unterbrochene Matches** (Regen/Dunkelheit) bleiben unter **Live** stehen
+  und sind orange als „Suspended" markiert – inkl. Fortsetzungszeit, sobald
+  die Neuansetzung im Feed steht. (ESPN sortiert sie sonst fälschlich unter
+  Finished bzw. Upcoming ein.)
 - **Setzlisten-Nummer** in Klammern neben dem Namen
 - Laufender Satz im Live-Match farblich hervorgehoben
 - Satzergebnisse mit Tiebreak-Punkten, Siegerinnen/Sieger fett
