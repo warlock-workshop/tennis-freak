@@ -1116,11 +1116,19 @@ async function loadRecentMatches(tour, id) {
     .slice(0, RECENT_MAX);
 }
 
-// Season record of one player; category and stat names come from the feed
-function loadStats(tour, id) {
+// Season record of one player; category and stat names come from the feed.
+// A doubles specialist with no singles matches this season has no record at
+// all, which the interface answers with 404 – an absence, not a fault, and
+// the card simply leaves those rows out.
+async function loadStats(tour, id) {
   const year = new Date().getFullYear();
-  return getJson(CORE + '/leagues/' + tour + '/seasons/' + year +
-                 '/types/2/athletes/' + id + '/statistics');
+  try {
+    return await getJson(CORE + '/leagues/' + tour + '/seasons/' + year +
+                         '/types/2/athletes/' + id + '/statistics');
+  } catch (e) {
+    if (/HTTP 404/.test(e.message)) return null;
+    throw e;
+  }
 }
 
 function statValue(stats, name) {
