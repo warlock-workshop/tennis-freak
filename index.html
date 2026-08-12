@@ -1846,6 +1846,19 @@ document.addEventListener('visibilitychange', () => {
 
 /* ---------- Update notice ---------- */
 
+// With black-translucent the installed app draws from the top edge of the
+// screen, but iOS keeps reporting a viewport shortened by the status bar. The
+// frame therefore ends that many points above the bottom and leaves a bare
+// strip. Measured on an iPhone 15 Pro: screen 852, viewport 793, strip 59.
+// Only in the installed app: in Safari that difference is the browser's own
+// toolbar, and stretching into it would push the list underneath it.
+function stretchFrameToScreen() {
+  if (!window.navigator.standalone) return;
+  if (window.screen.height <= window.innerHeight) return;
+  document.body.style.bottom = 'auto';
+  document.body.style.height = window.screen.height + 'px';
+}
+
 // Shown whenever the stored version differs from the built-in one, which on a
 // device that has never run the app means it shows once as an introduction.
 // Telling a first run apart from an install that predates this mechanism is
@@ -1866,6 +1879,7 @@ document.getElementById('updateBtn').addEventListener('click', () => {
 });
 
 /* ---------- Start ---------- */
+stretchFrameToScreen();
 showUpdateNotice();
 updateChrome();
 refresh().then(() => {
