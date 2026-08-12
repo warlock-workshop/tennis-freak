@@ -215,18 +215,23 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* Anzahl der Live-Matches als kleine rote Marke im "Live"-Tab */
-  /* Anchored to the label, not to the button: the tabs are all the same
-     width now, so the button edge sits some 20px away from the centred word
-     and a badge pinned there looks detached from it */
-  .tab-label { position: relative; display: inline-block; }
-  /* Sits free over the top right corner of the word rather than in the line,
-     so "Live" does not shift sideways when a match starts */
+  /* A word has no free corner the way an icon does, so the badge gets a slot
+     of its own beside it. The slot is always reserved, which is what keeps
+     "Live" from moving when a match starts, and the label is pushed back to
+     the right by half of it so the word still sits centred like the other
+     three. Numbers this side of a hundred fit; beyond that it would crowd
+     the gap to the next tab. */
+  .tab-label {
+    position: relative;
+    display: inline-block;
+    padding-right: 19px;
+    transform: translateX(9px);
+  }
   .count {
     position: absolute;
-    /* Overlaps the last letter slightly and clears the top of the bar by a
-       couple of pixels; a wider offset runs into the neighbouring tab */
-    top: -4px;
-    right: -6px;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
     background: var(--live);
     color: #fff;
     border-radius: 8px;
@@ -234,7 +239,7 @@
     line-height: 1.5;
     font-weight: 700;
     min-width: 15px;
-    padding: 0 4px;
+    padding: 0 3px;
   }
 
   /* ---------- Statuszeile ---------- */
