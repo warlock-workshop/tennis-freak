@@ -7,7 +7,12 @@
 <!-- iOS "Add to Home Screen": Seite verhält sich wie eine App -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- Not black-translucent: that draws from the top edge of the screen while
+     iOS keeps reporting a viewport shortened by the status bar, so the app
+     ended 59pt above the bottom on a bare strip that is not ours to paint.
+     With black the web view starts below the status bar and reaches the
+     bottom edge, and safe-area-inset-top becomes zero. -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Tennis Freak">
 <meta name="theme-color" content="#0b1120">
 <link rel="apple-touch-icon" href="icon.png">
@@ -1846,19 +1851,6 @@ document.addEventListener('visibilitychange', () => {
 
 /* ---------- Update notice ---------- */
 
-// With black-translucent the installed app draws from the top edge of the
-// screen, but iOS keeps reporting a viewport shortened by the status bar. The
-// frame therefore ends that many points above the bottom and leaves a bare
-// strip. Measured on an iPhone 15 Pro: screen 852, viewport 793, strip 59.
-// Only in the installed app: in Safari that difference is the browser's own
-// toolbar, and stretching into it would push the list underneath it.
-function stretchFrameToScreen() {
-  if (!window.navigator.standalone) return;
-  if (window.screen.height <= window.innerHeight) return;
-  document.body.style.bottom = 'auto';
-  document.body.style.height = window.screen.height + 'px';
-}
-
 // Shown whenever the stored version differs from the built-in one, which on a
 // device that has never run the app means it shows once as an introduction.
 // Telling a first run apart from an install that predates this mechanism is
@@ -1879,7 +1871,6 @@ document.getElementById('updateBtn').addEventListener('click', () => {
 });
 
 /* ---------- Start ---------- */
-stretchFrameToScreen();
 showUpdateNotice();
 updateChrome();
 refresh().then(() => {
