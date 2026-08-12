@@ -494,7 +494,7 @@
     color: var(--accent);
   }
   .h2h-row {
-    padding: 6px 4px;
+    padding: 11px 4px;
     border-bottom: 1px solid var(--border);
   }
   .h2h-row:last-child { border-bottom: none; }
@@ -514,13 +514,22 @@
     font-size: 13px;
   }
   .h2h-round { flex: none; color: var(--muted); font-size: 11px; }
-  .h2h-result {
-    padding-left: 38px;
+  /* Opponent on its own line, score beneath it. Both start at the left edge
+     rather than indented under the tournament, which gives the long scores
+     the full width instead of squeezing them into what is left */
+  .h2h-versus {
+    margin-top: 6px;
+    font-size: 14px;
+    color: var(--text);
+  }
+  .h2h-versus b { font-weight: 700; }
+  .h2h-verb { color: var(--muted); }
+  .h2h-score {
+    margin-top: 3px;
     font-size: 12.5px;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
-  .h2h-result b { color: var(--text); font-weight: 700; }
 
   /* One card per player, stacked – singles has two, doubles four */
   .d-player { padding: 6px 4px; border-bottom: 1px solid var(--border); }
@@ -976,7 +985,10 @@ async function loadMeeting(tour, evId, compId) {
     getJson(CORE + '/leagues/' + tour + '/events/' + evId + '/competitions/' + compId),
     eventName(tour, evId),
   ]);
-  const won = (c.competitors || []).find((x) => x.winner);
+  const players = (c.competitors || []).map((x) => ({
+    id: x.id, name: x.name || '', winner: !!x.winner,
+  }));
+  const won = players.find((x) => x.winner);
   return {
     date: c.date,
     tournament: name,
@@ -984,6 +996,7 @@ async function loadMeeting(tour, evId, compId) {
     score: scoreFromNote(c.notes?.[0]?.text),
     winnerId: won?.id || '',
     winnerName: won?.name || '',
+    players,
   };
 }
 
@@ -1312,20 +1325,40 @@ function sectionHtml(title, entry, body) {
   return '<section class="d-sec">' + title + inner + '</section>';
 }
 
-// One past match, used by the head-to-head and by the recent matches list.
-// `when` fills the left column: the year in a head-to-head, the date in a
-// list where every match is from the same season.
-function meetingRowHtml(m, when) {
-  const result = m.score
-    ? '<b>' + esc(m.winnerName) + '</b> ' + esc(m.score)
-    : '<b>' + esc(m.winnerName) + '</b>';
+// ESPN writes the score from the winner's side, so on a losing player's own
+// profile every set reads backwards. Swapping the pairs covers tiebreak
+// points as well, since those are written the same way.
+function flipScore(score) {
+  return score.replace(/(\d+)-(\d+)/g, '$2-$1');
+}
+
+// One past match. `when` fills the left column: the year in a head-to-head,
+// the date in a list where every match is from the same season. With a
+// subject the row is written from that player's side, naming the opponent
+// and saying how it went – in their own profile the winner alone would be
+// their own name over and over, which says nothing.
+function meetingRowHtml(m, when, subjectId) {
+  let result;
+  if (subjectId) {
+    const other = (m.players || []).find((p) => p.id !== subjectId);
+    const won = m.winnerId === subjectId;
+    const score = won ? m.score : flipScore(m.score);
+    result = '<div class="h2h-versus">' +
+        '<span class="h2h-verb">' + (won ? 'def.' : 'lost to') + '</span> ' +
+        esc(other?.name || 'Unknown') +
+      '</div>' +
+      (score ? '<div class="h2h-score">' + esc(score) + '</div>' : '');
+  } else {
+    result = '<div class="h2h-versus"><b>' + esc(m.winnerName) + '</b></div>' +
+      (m.score ? '<div class="h2h-score">' + esc(m.score) + '</div>' : '');
+  }
   return '<div class="h2h-row">' +
     '<div class="h2h-top">' +
       '<span class="h2h-year">' + esc(when) + '</span>' +
       '<span class="h2h-event">' + esc(m.tournament) + '</span>' +
       '<span class="h2h-round">' + esc(roundLabel(m.round)) + '</span>' +
     '</div>' +
-    '<div class="h2h-result">' + result + '</div>' +
+    result +
   '</div>';
 }
 
@@ -1356,7 +1389,8 @@ function recentHtml(tour, id) {
   const entry = cacheEntry('recent', tour + ':' + id, () => loadRecentMatches(tour, id));
   return sectionHtml('<h3>Recent matches</h3>', entry, (matches) => {
     if (!matches.length) return '<div class="d-note">No completed matches on record.</div>';
-    return matches.map((m) => meetingRowHtml(m, fmtDayMonth.format(new Date(m.date)))).join('');
+    return matches.map((m) =>
+      meetingRowHtml(m, fmtDayMonth.format(new Date(m.date)), id)).join('');
   });
 }
 
