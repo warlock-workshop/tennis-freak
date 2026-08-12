@@ -54,9 +54,11 @@
     flex-direction: column;
     gap: 6px;
   }
+  /* The container stays empty so the active side, which is filled with
+     --card-inner, has something to stand out against */
   .seg {
     display: flex;
-    background: var(--card-inner);
+    background: transparent;
     border: 1px solid var(--border);
     border-radius: 9px;
     padding: 2px;
@@ -155,6 +157,9 @@
     border-bottom: 1px solid var(--border);
   }
   .rank-row:last-child { border-bottom: none; }
+  /* Ranking rows open the player, same as match cards open the match */
+  .rank-row { cursor: pointer; }
+  .rank-row:active { background: rgba(255, 255, 255, 0.05); }
   .rank-no {
     min-width: 26px;
     text-align: right;
@@ -275,13 +280,15 @@
   }
 
   /* ---------- Einzelnes Match ---------- */
-  /* Matches are separated by a hairline instead of sitting in tiles of their
-     own; the round heading starts a group, so the line above it is dropped */
+  /* Each match keeps its own tile. Hairlines were quieter but read as a list;
+     a tappable row has to look tappable */
   .match {
-    padding: 9px 0;
-    border-top: 1px solid var(--border);
+    background: var(--card-inner);
+    border-radius: 9px;
+    padding: 7px 9px;
+    margin-bottom: 5px;
   }
-  .round-h + .match { border-top: none; }
+  .match:last-child { margin-bottom: 0; }
   .match-meta {
     font-size: 11px;
     color: var(--muted);
@@ -571,7 +578,7 @@ const state = {
   error: null,
   detail: null,                         // open detail view: { tour, evId, compId }
   // Lazily loaded blocks of the detail view, one entry per key; see cacheEntry()
-  cache: { athletes: {}, stats: {}, h2h: {} },
+  cache: { athletes: {}, stats: {}, h2h: {}, recent: {} },
 };
 
 /* ---------- kleine Helfer ---------- */
@@ -739,11 +746,14 @@ function loadEventIds(tour, id, year) {
   return eventLogs[key];
 }
 
-// All matches of one player in one season as { competitionId: eventId }.
-// Only the ids are kept, which turns a 40 KB response into about 1 KB in
-// localStorage; finished seasons never change and are kept for good.
+// All matches of one player in one season as [[competitionId, eventId], …],
+// newest first, in the order the feed returns them. Only the ids are kept,
+// which turns a 40 KB response into about 1 KB in localStorage; finished
+// seasons never change and are kept for good.
 async function fetchEventIds(tour, id, year) {
-  const key = 'el:' + tour + ':' + year + ':' + id;
+  // el2 because the stored shape changed from an object to an ordered list;
+  // numeric-looking object keys are reordered by the engine and lost it
+  const key = 'el2:' + tour + ':' + year + ':' + id;
   const stored = localStorage.getItem(key);
   if (stored) {
     const hit = JSON.parse(stored);
@@ -758,28 +768,43 @@ async function fetchEventIds(tour, id, year) {
     if (/HTTP 40[04]/.test(e.message)) return {};
     throw e;
   }
-  const map = {};
+  const list = [];
   for (const item of data.events?.items || []) {
     const comp = (item.competition?.$ref || '').match(/competitions\/(\d+)/);
     const ev = (item.event?.$ref || '').match(/events\/([\w-]+)/);
-    if (comp && ev) map[comp[1]] = ev[1];
+    if (comp && ev) list.push([comp[1], ev[1]]);
   }
   // The store only speeds things up; a full quota must not break the view
   try {
-    localStorage.setItem(key, JSON.stringify({ t: Date.now(), m: map }));
+    localStorage.setItem(key, JSON.stringify({ t: Date.now(), m: list }));
   } catch (e) { /* quota exceeded – carry on without the cache */ }
-  return map;
+  return list;
 }
 
-const events = {};                    // tournament data by event id
+const events = {};                    // pending name lookups by event id
 
-function loadEvent(tour, evId) {
-  const key = tour + ':' + evId;
-  if (!events[key]) {
-    events[key] = getJson(CORE + '/leagues/' + tour + '/events/' + evId)
-      .catch((e) => { delete events[key]; throw e; });
+// Tournament name for an event id. The core API answers this with about
+// 500 KB because its event object lists the entire draw, so it is the last
+// resort: running tournaments are already in the loaded scoreboard, and a
+// name once fetched is kept for good – event ids carry the year, so a name
+// never changes.
+function eventName(tour, evId) {
+  for (const ev of state.data[tour]?.events || []) {
+    if (ev.id === evId && ev.name) return Promise.resolve(ev.name);
   }
-  return events[key];
+  const key = 'ev:' + evId;
+  const stored = localStorage.getItem(key);
+  if (stored) return Promise.resolve(stored);
+  if (!events[evId]) {
+    events[evId] = getJson(CORE + '/leagues/' + tour + '/events/' + evId)
+      .then((d) => {
+        const name = d.name || '';
+        try { localStorage.setItem(key, name); } catch (e) { /* quota */ }
+        return name;
+      })
+      .catch((e) => { delete events[evId]; throw e; });
+  }
+  return events[evId];
 }
 
 // The score line sits at the end of the note ("… bt … 6-2 4-6 6-4", tiebreaks
@@ -793,14 +818,14 @@ function scoreFromNote(text) {
 
 // One past meeting, resolved from its competition and its tournament
 async function loadMeeting(tour, evId, compId) {
-  const [c, ev] = await Promise.all([
+  const [c, name] = await Promise.all([
     getJson(CORE + '/leagues/' + tour + '/events/' + evId + '/competitions/' + compId),
-    loadEvent(tour, evId),
+    eventName(tour, evId),
   ]);
   const won = (c.competitors || []).find((x) => x.winner);
   return {
     date: c.date,
-    tournament: ev.name || '',
+    tournament: name,
     round: c.round?.description || '',
     score: scoreFromNote(c.notes?.[0]?.text),
     winnerId: won?.id || '',
@@ -818,16 +843,38 @@ async function loadHeadToHead(tour, idA, idB) {
     Promise.all(years.map((y) => loadEventIds(tour, idA, y))),
     Promise.all(years.map((y) => loadEventIds(tour, idB, y))),
   ]);
-  const mapA = Object.assign({}, ...listsA);
-  const mapB = Object.assign({}, ...listsB);
-  const shared = Object.keys(mapA).filter((compId) => compId in mapB);
+  const mapA = new Map(listsA.flat());
+  const idsB = new Set(listsB.flat().map(([compId]) => compId));
+  const shared = [...mapA.keys()].filter((compId) => idsB.has(compId));
   const meetings = await Promise.all(
-    shared.map((compId) => loadMeeting(tour, mapA[compId], compId))
+    shared.map((compId) => loadMeeting(tour, mapA.get(compId), compId))
   );
   // Drops the match that is being looked at, which has no winner yet
   return meetings
     .filter((m) => m.winnerId)
     .sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+// Most recent matches of one player. The event log comes back newest first,
+// so only the head of it is resolved instead of a whole season – one request
+// per match. Scheduled matches carry no winner yet and drop out.
+const RECENT_MAX = 8;
+
+async function loadRecentMatches(tour, id) {
+  const thisYear = new Date().getFullYear();
+  let list = await loadEventIds(tour, id, thisYear);
+  // Early in the year a season holds too few matches to be worth showing
+  if (list.length < RECENT_MAX) {
+    list = list.concat(await loadEventIds(tour, id, thisYear - 1));
+  }
+  const head = list.slice(0, RECENT_MAX + 3);
+  const matches = await Promise.all(
+    head.map(([compId, evId]) => loadMeeting(tour, evId, compId))
+  );
+  return matches
+    .filter((m) => m.winnerId)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, RECENT_MAX);
 }
 
 // Season record of one player; category and stat names come from the feed
@@ -1037,7 +1084,7 @@ function rankRowHtml(e) {
   let trend = '';
   if (t.startsWith('+')) trend = '<span class="trend up">▲' + esc(t.slice(1)) + '</span>';
   else if (t.startsWith('-') && t !== '-') trend = '<span class="trend down">▼' + esc(t.slice(1)) + '</span>';
-  return '<div class="rank-row">' +
+  return '<div class="rank-row" data-athlete="' + esc(a.id || '') + '">' +
     '<span class="rank-no">' + esc(e.current) + '</span>' +
     '<span class="flagwrap">' + flag + '</span>' +
     '<span class="name">' + esc(a.displayName || a.shortname || '–') + '</span>' +
@@ -1111,6 +1158,23 @@ function sectionHtml(title, entry, body) {
   return '<section class="d-sec">' + title + inner + '</section>';
 }
 
+// One past match, used by the head-to-head and by the recent matches list.
+// `when` fills the left column: the year in a head-to-head, the date in a
+// list where every match is from the same season.
+function meetingRowHtml(m, when) {
+  const result = m.score
+    ? '<b>' + esc(m.winnerName) + '</b> ' + esc(m.score)
+    : '<b>' + esc(m.winnerName) + '</b>';
+  return '<div class="h2h-row">' +
+    '<div class="h2h-top">' +
+      '<span class="h2h-year">' + esc(when) + '</span>' +
+      '<span class="h2h-event">' + esc(m.tournament) + '</span>' +
+      '<span class="h2h-round">' + esc(roundLabel(m.round)) + '</span>' +
+    '</div>' +
+    '<div class="h2h-result">' + result + '</div>' +
+  '</div>';
+}
+
 function h2hHtml(tour, comps) {
   const [a, b] = comps.map((x) => x.athlete);
   const entry = cacheEntry('h2h', tour + ':' + a.id + ':' + b.id,
@@ -1125,30 +1189,34 @@ function h2hHtml(tour, comps) {
         '<span class="val">' + n + '</span>'
       ).join('') +
     '</div>';
-    const rows = meetings.map((m) => {
-      const result = m.score
-        ? '<b>' + esc(m.winnerName) + '</b> ' + esc(m.score)
-        : '<b>' + esc(m.winnerName) + '</b>';
-      return '<div class="h2h-row">' +
-        '<div class="h2h-top">' +
-          '<span class="h2h-year">' + new Date(m.date).getFullYear() + '</span>' +
-          '<span class="h2h-event">' + esc(m.tournament) + '</span>' +
-          '<span class="h2h-round">' + esc(roundLabel(m.round)) + '</span>' +
-        '</div>' +
-        '<div class="h2h-result">' + result + '</div>' +
-      '</div>';
-    }).join('');
-    return tally + rows;
+    return tally + meetings.map((m) => meetingRowHtml(m, new Date(m.date).getFullYear())).join('');
+  });
+}
+
+// The last matches a player has played, newest first
+const fmtDayMonth = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/Berlin', day: 'numeric', month: 'short',
+});
+
+function recentHtml(tour, id) {
+  const entry = cacheEntry('recent', tour + ':' + id, () => loadRecentMatches(tour, id));
+  return sectionHtml('<h3>Recent matches</h3>', entry, (matches) => {
+    if (!matches.length) return '<div class="d-note">No completed matches on record.</div>';
+    return matches.map((m) => meetingRowHtml(m, fmtDayMonth.format(new Date(m.date)))).join('');
   });
 }
 
 // One card per player: world ranking, season record and profile
-function playerHtml(tour, athlete) {
+// withName is off where the view already carries the name in its title bar,
+// so a single player's profile does not repeat it
+function playerHtml(tour, athlete, withName = true) {
   const id = athleteId(athlete);
   const flagUrl = athlete.flag?.href;
-  const head = '<div class="d-player-name">' +
-    (flagUrl ? '<img class="flag" loading="lazy" src="' + esc(flagUrl) + '" alt="">' : '') +
-    esc(athlete.displayName || athlete.shortName || '–') + '</div>';
+  const head = withName
+    ? '<div class="d-player-name">' +
+      (flagUrl ? '<img class="flag" loading="lazy" src="' + esc(flagUrl) + '" alt="">' : '') +
+      esc(athlete.displayName || athlete.shortName || '–') + '</div>'
+    : '';
   if (!id) return '<div class="d-player">' + head + '</div>';
 
   const profile = cacheEntry('athletes', id, () => getJson(CORE + '/athletes/' + id));
@@ -1207,12 +1275,29 @@ function renderDetail() {
   // loading; without this the reader would be thrown back to the top each time
   const keepScroll = el.scrollTop;
   const { tour, compId } = state.detail;
+  el.hidden = false;
+
+  // Opened from the ranking: one player instead of a match
+  if (state.detail.athlete) {
+    const a = state.detail.athlete;
+    el.innerHTML = '<div class="detail-inner">' +
+      '<div class="detail-bar">' +
+        '<button class="detail-close" type="button" aria-label="Close">✕</button>' +
+        (a.flag?.href ? '<img class="flag" src="' + esc(a.flag.href) + '" alt="">' : '') +
+        '<span class="detail-title">' + esc(a.displayName) + '</span>' +
+      '</div>' +
+      '<section class="d-sec">' + playerHtml(tour, a, false) + '</section>' +
+      recentHtml(tour, a.id) +
+    '</div>';
+    el.scrollTop = keepScroll;
+    return;
+  }
+
   const found = findCompetition(tour, compId);
   const bar = '<div class="detail-bar">' +
     '<button class="detail-close" type="button" aria-label="Close">✕</button>' +
     '<span class="detail-title">' + esc(found?.ev.name || 'Match') + '</span>' +
   '</div>';
-  el.hidden = false;
   if (!found) {
     el.innerHTML = '<div class="detail-inner">' + bar +
       '<div class="hint">This match is no longer in the feed.</div></div>';
@@ -1352,10 +1437,32 @@ function closeDetail(fromHistory) {
   window.scrollTo(0, listScroll);
 }
 
+// Opens the player behind a ranking row. Name and flag are taken from the
+// ranking, where the flag is a bare url rather than the object the scoreboard
+// uses, so it is normalised here.
+function openPlayer(id) {
+  const entry = (state.rankings[state.tour]?.ranks || []).find((r) => r.athlete?.id === id);
+  const a = entry?.athlete || {};
+  listScroll = window.scrollY;
+  state.detail = {
+    tour: state.tour,
+    athlete: {
+      id,
+      displayName: a.displayName || a.shortname || '',
+      flag: typeof a.flag === 'string' ? { href: a.flag } : a.flag,
+    },
+  };
+  history.pushState({ player: id }, '');
+  document.body.classList.add('detail-open');
+  renderDetail();
+}
+
 // One delegated listener instead of one per card
 document.getElementById('content').addEventListener('click', (e) => {
   const card = e.target.closest('.match');
-  if (card?.dataset.comp) openDetail(card.dataset.ev, card.dataset.comp);
+  if (card?.dataset.comp) return openDetail(card.dataset.ev, card.dataset.comp);
+  const rank = e.target.closest('.rank-row');
+  if (rank?.dataset.athlete) openPlayer(rank.dataset.athlete);
 });
 document.getElementById('detail').addEventListener('click', (e) => {
   if (e.target.closest('.detail-close')) closeDetail(false);
