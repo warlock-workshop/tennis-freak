@@ -585,7 +585,8 @@
     padding: 7px 0;
     cursor: pointer;
   }
-  .h2h-head:active { opacity: 0.6; }
+  .h2h-head:active,
+  .h2h-tally:active { opacity: 0.6; }
   /* Folds through a quarter turn rather than flipping over: pointing left
      while folded, back towards the heading it belongs to, and turning down
      as it opens */
@@ -601,6 +602,7 @@
     gap: 2px 10px;
     padding: 0 4px 8px;
     margin-bottom: 4px;
+    cursor: pointer;
   }
   /* The rule belongs to what unfolds, so it is drawn only when something
      is unfolded below it */
@@ -1920,7 +1922,11 @@ function toggleH2h() {
 
 document.getElementById('detail').addEventListener('click', (e) => {
   if (e.target.closest('.detail-close')) return closeDetail(false);
-  if (e.target.closest('.h2h-head') || e.target.closest('.d-sec.foldable')) toggleH2h();
+  // Everything above the meetings folds them away: the heading, the tally,
+  // and while folded the whole box. Only the meetings themselves do not, or
+  // they would disappear under the finger that is reading them.
+  if (e.target.closest('.h2h-head') || e.target.closest('.h2h-tally') ||
+      e.target.closest('.d-sec.foldable')) toggleH2h();
 });
 window.addEventListener('popstate', () => closeDetail(true));
 /* ---------- Ziehen zum Aktualisieren ---------- */
