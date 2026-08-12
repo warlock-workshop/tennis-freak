@@ -215,12 +215,18 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* Anzahl der Live-Matches als kleine rote Marke im "Live"-Tab */
-  /* Sits free over the top right corner of its button rather than in the
-     line, so the word "Live" does not shift sideways when a match starts */
+  /* Anchored to the label, not to the button: the tabs are all the same
+     width now, so the button edge sits some 20px away from the centred word
+     and a badge pinned there looks detached from it */
+  .tab-label { position: relative; display: inline-block; }
+  /* Sits free over the top right corner of the word rather than in the line,
+     so "Live" does not shift sideways when a match starts */
   .count {
     position: absolute;
-    top: 1px;
-    right: 2px;
+    /* Overlaps the last letter slightly and clears the top of the bar by a
+       couple of pixels; a wider offset runs into the neighbouring tab */
+    top: -4px;
+    right: -6px;
     background: var(--live);
     color: #fff;
     border-radius: 8px;
@@ -1518,7 +1524,9 @@ function updateChrome() {
       for (const r of g.rounds) n += r.matches.length;
     }
   }
-  document.getElementById('liveTab').innerHTML = 'Live' + (n ? ' <span class="count">' + n + '</span>' : '');
+  // The badge hangs off the label, so the label needs a box of its own
+  document.getElementById('liveTab').innerHTML =
+    '<span class="tab-label">Live' + (n ? '<span class="count">' + n + '</span>' : '') + '</span>';
 
   // Singles/Doubles greift in der Rankings-Ansicht nicht (Feed hat nur Einzel)
   document.querySelector('.tabs-discipline').style.display =
