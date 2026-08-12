@@ -517,6 +517,75 @@
   }
   .d-facts .lbl { color: var(--muted); }
   .d-facts .val { font-variant-numeric: tabular-nums; }
+
+  /* ---------- Update notice ---------- */
+  /* Shown once after an update, over everything else including the sheet,
+     and entering the same way so the app has one kind of movement */
+  .update {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    overflow-y: auto;
+    background: var(--bg);
+    transform: translateY(100%);
+    transition: transform 260ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .update.open { transform: translateY(0); }
+  @media (prefers-reduced-motion: reduce) {
+    .update { transition: none; }
+  }
+
+  .up-card { width: 100%; max-width: 330px; text-align: center; }
+  .up-logo {
+    width: 72px;
+    height: 72px;
+    border-radius: 18px;
+    display: block;
+    margin: 0 auto 20px;
+  }
+  .up-mark {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 3.5px;
+    text-transform: uppercase;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .up-sub {
+    margin: 12px 0 26px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .up-lead { margin: 0 0 24px; font-size: 15px; font-weight: 600; }
+  /* Name of the thing as a small cap line, the explanation under it: reads
+     as an entry rather than as a ticked-off changelog */
+  .up-item { text-align: left; margin-bottom: 18px; }
+  .up-item b {
+    display: block;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 1.1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 3px;
+  }
+  .up-item span { font-size: 13.5px; }
+  #updateBtn {
+    margin-top: 12px;
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    background: var(--card-inner);
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -556,6 +625,37 @@
 <!-- Detail view of a single match; filled by renderDetail(), hidden while closed -->
 <div id="detail" class="detail" hidden></div>
 
+<!-- Release notes, shown once per version. The text is edited by hand
+     together with APP_VERSION whenever something ships. -->
+<div id="update" class="update" hidden>
+  <div class="up-card">
+    <img class="up-logo" src="icon.png" alt="">
+    <div class="up-mark">Tennis Freak</div>
+    <div class="up-sub">What&rsquo;s new</div>
+
+    <p class="up-lead">Tap any match to open it.</p>
+
+    <div class="up-item">
+      <b>Head-to-head</b>
+      <span>Every previous meeting between the two players, with the score</span>
+    </div>
+    <div class="up-item">
+      <b>Player cards</b>
+      <span>World ranking, season record, titles, prize money and profile</span>
+    </div>
+    <div class="up-item">
+      <b>Rankings</b>
+      <span>Tap a player for their profile and last matches</span>
+    </div>
+    <div class="up-item">
+      <b>Live matches</b>
+      <span>Keep updating while the view is open</span>
+    </div>
+
+    <button id="updateBtn" type="button">Got it</button>
+  </div>
+</div>
+
 <script>
 'use strict';
 
@@ -585,6 +685,10 @@ const CORE = 'https://sports.core.api.espn.com/v2/sports/tennis';
 // per player on first use, then comes from localStorage.
 const H2H_SEASONS = 5;
 const EVENTLOG_TTL = 86_400_000;      // running season changes daily, past ones never
+
+// Bumped by hand whenever something ships, together with the release notes in
+// the #update block. A device that has seen this exact string gets no notice.
+const APP_VERSION = '2026-08-12';
 
 // Auswahl aus dem letzten Besuch wiederherstellen (ungültige Werte ignorieren)
 function restore(key, allowed, fallback) {
@@ -1535,7 +1639,29 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+/* ---------- Update notice ---------- */
+
+// Shown whenever the stored version differs from the built-in one, which on a
+// device that has never run the app means it shows once as an introduction.
+// Telling a first run apart from an install that predates this mechanism is
+// not possible, since neither has anything stored.
+function showUpdateNotice() {
+  if (localStorage.getItem('version') === APP_VERSION) return;
+  const el = document.getElementById('update');
+  el.hidden = false;
+  void el.offsetHeight;
+  el.classList.add('open');
+}
+
+document.getElementById('updateBtn').addEventListener('click', () => {
+  const el = document.getElementById('update');
+  localStorage.setItem('version', APP_VERSION);
+  el.classList.remove('open');
+  setTimeout(() => { el.hidden = true; }, SHEET_MS);
+});
+
 /* ---------- Start ---------- */
+showUpdateNotice();
 updateChrome();
 refresh().then(() => {
   // Startet die App in der gemerkten Rankings-Ansicht, Rangliste nachladen
