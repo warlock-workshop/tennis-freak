@@ -1529,9 +1529,11 @@ function updateChrome() {
       for (const r of g.rounds) n += r.matches.length;
     }
   }
-  // The badge hangs off the label, so the label needs a box of its own
+  // The badge sits in a slot of fixed width, so the count is capped rather
+  // than allowed to widen it
+  const badge = n > 99 ? '99+' : n;
   document.getElementById('liveTab').innerHTML =
-    '<span class="tab-label">Live' + (n ? '<span class="count">' + n + '</span>' : '') + '</span>';
+    '<span class="tab-label">Live' + (n ? '<span class="count">' + badge + '</span>' : '') + '</span>';
 
   // Singles/Doubles greift in der Rankings-Ansicht nicht (Feed hat nur Einzel)
   document.querySelector('.tabs-discipline').style.display =
