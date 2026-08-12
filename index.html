@@ -19,10 +19,13 @@
     --bg: #0b1120;          /* dunkler Hintergrund */
     --card: #151f36;        /* Turnier-Karten */
     --card-inner: #1c2942;  /* Match-Zeilen */
-    --text: #e9eef8;
-    --muted: #8d99b2;
-    --accent: #d8e84a;      /* Tennisball-Gelbgrün */
-    --live: #ff5263;
+    /* Text and quiet text are neutral rather than blue-tinted, and both
+       accents sit a step below full saturation; the interface reads calmer
+       without giving up the ball colour */
+    --text: #e6e8ea;
+    --muted: #8a8d92;
+    --accent: #c2cb5e;      /* Tennisball-Gelbgrün */
+    --live: #e2564a;
     --border: #263350;
   }
   * { box-sizing: border-box; }
@@ -70,7 +73,8 @@
     cursor: pointer;
     white-space: nowrap;
   }
-  .seg button.active { background: var(--accent); color: #1a2208; }
+  /* The active side is lifted by tone and weight, not by a filled accent */
+  .seg button.active { background: var(--card-inner); color: var(--text); }
   .seg-tour button { font-size: 15px; }
 
   /* Titelzeile mit Ball und Aktualisieren-Knopf */
@@ -129,7 +133,18 @@
     cursor: pointer;
     white-space: nowrap;
   }
-  .bottombar button.active { background: var(--accent); color: #1a2208; }
+  /* Active tab marked by a short rule under the label instead of a filled
+     pill, which keeps the accent to the two places where it carries meaning */
+  .bottombar button.active { color: var(--text); }
+  .bottombar button.active::after {
+    content: '';
+    display: block;
+    width: 16px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--accent);
+    margin: 3px auto -2px;
+  }
 
   /* ---------- Weltrangliste ---------- */
   .rank-row {
@@ -185,7 +200,9 @@
     padding: 1px 5px;
     vertical-align: 2px;
   }
-  .bottombar button.active .count { background: #1a2208; color: var(--accent); }
+  /* The active tab is no longer a filled accent, so the badge keeps its
+     own colours there instead of inverting into it */
+  .bottombar button.active .count { background: var(--live); color: #fff; }
 
   /* ---------- Statuszeile ---------- */
   .statusline {
@@ -205,35 +222,44 @@
   .hint { color: var(--muted); text-align: center; padding: 36px 16px; }
 
   /* Tages-Überschrift über den Turnier-Karten (Finished/Upcoming) */
+  /* Set as a quiet heading in text colour with a hairline under it, so the
+     day reads as a division of the page rather than as a coloured label */
   .day-h {
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    color: var(--accent);
-    font-weight: 700;
-    margin: 12px 4px 6px;
+    font-size: 17px;
+    letter-spacing: -0.2px;
+    color: var(--text);
+    font-weight: 600;
+    margin: 16px 4px 3px;
+    padding-bottom: 7px;
+    border-bottom: 1px solid var(--border);
   }
   /* Datums-Zwischenüberschrift einzelner Tage unter "Last 7 days" */
   .day-h.sub {
-    font-size: 11px;
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0;
     color: var(--muted);
-    margin: 6px 4px 5px;
+    margin: 12px 4px 4px;
+    padding-bottom: 0;
+    border-bottom: none;
   }
 
+  /* One surface per tournament. The border is gone: the card is told apart
+     from the page by its own tone, which needs no outline */
   .tournament {
     background: var(--card);
-    border: 1px solid var(--border);
     border-radius: 12px;
-    margin-bottom: 10px;
-    padding: 4px 8px 8px;
+    margin-bottom: 12px;
+    padding: 2px 12px 6px;
   }
   .tournament > h2 {
     font-size: 14.5px;
+    letter-spacing: -0.1px;
     margin: 0;
-    padding: 7px 4px 1px;
+    padding: 11px 0 1px;
   }
   .tournament .venue {
-    padding: 0 4px 7px;
+    padding: 0 0 5px;
     font-size: 11px;
     color: var(--muted);
   }
@@ -242,20 +268,20 @@
   .round-h {
     font-size: 10.5px;
     text-transform: uppercase;
-    letter-spacing: 0.7px;
+    letter-spacing: 0.9px;
     color: var(--muted);
     font-weight: 700;
-    margin: 8px 4px 5px;
+    margin: 13px 0 2px;
   }
 
   /* ---------- Einzelnes Match ---------- */
+  /* Matches are separated by a hairline instead of sitting in tiles of their
+     own; the round heading starts a group, so the line above it is dropped */
   .match {
-    background: var(--card-inner);
-    border-radius: 9px;
-    padding: 7px 9px;
-    margin-bottom: 5px;
+    padding: 9px 0;
+    border-top: 1px solid var(--border);
   }
-  .match:last-child { margin-bottom: 0; }
+  .round-h + .match { border-top: none; }
   .match-meta {
     font-size: 11px;
     color: var(--muted);
@@ -328,7 +354,9 @@
   /* Match cards open the detail view on tap; the pressed state is the only
      hint that they are interactive, so it stays clearly visible */
   .match { cursor: pointer; }
-  .match:active { background: #22304d; }
+  /* Neutral rather than a fixed blue, so the pressed state carries over to
+     any palette the card sits on */
+  .match:active { background: rgba(255, 255, 255, 0.05); }
 
   /* Covers the whole viewport including header and glass bar (z-index 10/20)
      and brings its own scrolling, so the list keeps its position underneath */
