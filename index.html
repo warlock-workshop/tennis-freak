@@ -323,6 +323,139 @@
     font-size: 10.5px;
     padding: 12px 16px 2px;
   }
+
+  /* ---------- Match detail view ---------- */
+  /* Match cards open the detail view on tap; the pressed state is the only
+     hint that they are interactive, so it stays clearly visible */
+  .match { cursor: pointer; }
+  .match:active { background: #22304d; }
+
+  /* Covers the whole viewport including header and glass bar (z-index 10/20)
+     and brings its own scrolling, so the list keeps its position underneath */
+  .detail {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: var(--bg);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  body.detail-open { overflow: hidden; }
+  .detail-inner {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: calc(8px + env(safe-area-inset-top)) 10px
+             calc(24px + env(safe-area-inset-bottom));
+  }
+  .detail-bar {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding-bottom: 10px;
+  }
+  .detail-close {
+    background: var(--card-inner);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    width: 38px;
+    height: 30px;
+    font-size: 17px;
+    line-height: 1;
+    flex: none;
+    cursor: pointer;
+  }
+  .detail-title {
+    font-size: 14px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .d-sec {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 8px;
+    margin-bottom: 10px;
+  }
+  .d-sec > h3 {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--muted);
+    font-weight: 700;
+    margin: 2px 4px 8px;
+  }
+  .d-note { color: var(--muted); font-size: 12px; padding: 2px 4px; }
+  .d-note.error { color: var(--live); font-weight: 600; }
+
+  /* Head-to-head: named tally first, then one row per meeting */
+  .h2h-tally {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 10px;
+    padding: 0 4px 8px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .h2h-tally .lbl { font-size: 13.5px; font-weight: 700; }
+  .h2h-tally .val {
+    font-size: 15px;
+    font-weight: 700;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+  }
+  .h2h-row {
+    padding: 6px 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .h2h-row:last-child { border-bottom: none; }
+  .h2h-top { display: flex; align-items: baseline; gap: 7px; }
+  .h2h-year {
+    flex: none;
+    color: var(--muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .h2h-event {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+  .h2h-round { flex: none; color: var(--muted); font-size: 11px; }
+  .h2h-result {
+    padding-left: 38px;
+    font-size: 12.5px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .h2h-result b { color: var(--text); font-weight: 700; }
+
+  /* One card per player, stacked – singles has two, doubles four */
+  .d-player { padding: 6px 4px; border-bottom: 1px solid var(--border); }
+  .d-player:last-child { border-bottom: none; }
+  .d-player-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 5px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .d-facts {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 10px;
+    font-size: 12.5px;
+  }
+  .d-facts .lbl { color: var(--muted); }
+  .d-facts .val { font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -359,6 +492,9 @@
   <button data-val="rankings" role="tab">Rankings</button>
 </nav>
 
+<!-- Detail view of a single match; filled by renderDetail(), hidden while closed -->
+<div id="detail" class="detail" hidden></div>
+
 <script>
 'use strict';
 
@@ -381,6 +517,14 @@ const RANKINGS_API = {
 const REFRESH_MS = 60_000;            // automatische Aktualisierung der aktiven Tour
 const RANKINGS_TTL = 3_600_000;       // Rangliste ändert sich wöchentlich – 1 h Cache reicht
 
+// Deeper ESPN interface behind the scoreboard. It serves player profiles,
+// season records and per-season match lists, which the scoreboard feed omits.
+const CORE = 'https://sports.core.api.espn.com/v2/sports/tennis';
+// Seasons the head-to-head record reaches back. Each season costs one request
+// per player on first use, then comes from localStorage.
+const H2H_SEASONS = 5;
+const EVENTLOG_TTL = 86_400_000;      // running season changes daily, past ones never
+
 // Auswahl aus dem letzten Besuch wiederherstellen (ungültige Werte ignorieren)
 function restore(key, allowed, fallback) {
   const v = localStorage.getItem(key);
@@ -397,6 +541,9 @@ const state = {
   rankingsAt: { atp: 0, wta: 0 },
   loading: false,
   error: null,
+  detail: null,                         // open detail view: { tour, evId, compId }
+  // Lazily loaded blocks of the detail view, one entry per key; see cacheEntry()
+  cache: { athletes: {}, stats: {}, h2h: {} },
 };
 
 /* ---------- kleine Helfer ---------- */
@@ -528,6 +675,147 @@ async function withLoading(tour, loader) {
 const refresh = (tour = state.tour) => withLoading(tour, loadTour);
 const refreshRankings = (tour = state.tour) => withLoading(tour, loadRankings);
 
+/* ---------- Detaildaten (nachgeladen) ---------- */
+
+async function getJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
+// Store for the lazily loaded blocks. Each entry keeps its own state, so the
+// detail view can draw synchronously and redraw once a block arrives. A failed
+// load stays in the store as an error instead of being retried on every redraw.
+function cacheEntry(bucket, key, load) {
+  const store = state.cache[bucket];
+  if (!store[key]) {
+    const entry = store[key] = { status: 'loading', value: null, error: null };
+    load().then(
+      (value) => { entry.status = 'ok'; entry.value = value; },
+      (err) => { entry.status = 'error'; entry.error = err.message; }
+    ).then(renderDetail);
+  }
+  return store[key];
+}
+
+// Per-season match lists, kept as promises because only loadHeadToHead reads
+// them. Keyed "tour:year:athleteId".
+const eventLogs = {};
+
+function loadEventIds(tour, id, year) {
+  const key = tour + ':' + year + ':' + id;
+  if (!eventLogs[key]) {
+    eventLogs[key] = fetchEventIds(tour, id, year)
+      .catch((e) => { delete eventLogs[key]; throw e; });
+  }
+  return eventLogs[key];
+}
+
+// All matches of one player in one season as { competitionId: eventId }.
+// Only the ids are kept, which turns a 40 KB response into about 1 KB in
+// localStorage; finished seasons never change and are kept for good.
+async function fetchEventIds(tour, id, year) {
+  const key = 'el:' + tour + ':' + year + ':' + id;
+  const stored = localStorage.getItem(key);
+  if (stored) {
+    const hit = JSON.parse(stored);
+    if (year < new Date().getFullYear() || Date.now() - hit.t < EVENTLOG_TTL) return hit.m;
+  }
+  let data;
+  try {
+    data = await getJson(CORE + '/leagues/' + tour + '/seasons/' + year +
+                         '/athletes/' + id + '/eventlog?limit=200');
+  } catch (e) {
+    // Seasons before a player's first tour appearance simply do not exist
+    if (/HTTP 40[04]/.test(e.message)) return {};
+    throw e;
+  }
+  const map = {};
+  for (const item of data.events?.items || []) {
+    const comp = (item.competition?.$ref || '').match(/competitions\/(\d+)/);
+    const ev = (item.event?.$ref || '').match(/events\/([\w-]+)/);
+    if (comp && ev) map[comp[1]] = ev[1];
+  }
+  // The store only speeds things up; a full quota must not break the view
+  try {
+    localStorage.setItem(key, JSON.stringify({ t: Date.now(), m: map }));
+  } catch (e) { /* quota exceeded – carry on without the cache */ }
+  return map;
+}
+
+const events = {};                    // tournament data by event id
+
+function loadEvent(tour, evId) {
+  const key = tour + ':' + evId;
+  if (!events[key]) {
+    events[key] = getJson(CORE + '/leagues/' + tour + '/events/' + evId)
+      .catch((e) => { delete events[key]; throw e; });
+  }
+  return events[key];
+}
+
+// The score line sits at the end of the note ("… bt … 6-2 4-6 6-4", tiebreaks
+// as "7-6 (7-5)"). Retirements and walkovers end in a marker instead.
+function scoreFromNote(text) {
+  const t = (text || '').trim();
+  const sets = t.match(/\d+-\d+(\s*\(\d+-\d+\))?(\s+\d+-\d+(\s*\(\d+-\d+\))?)*(\s+(w\/o|ret\.?))?$/i);
+  if (sets) return sets[0].trim();
+  return /w\/o/i.test(t) ? 'w/o' : '';
+}
+
+// One past meeting, resolved from its competition and its tournament
+async function loadMeeting(tour, evId, compId) {
+  const [c, ev] = await Promise.all([
+    getJson(CORE + '/leagues/' + tour + '/events/' + evId + '/competitions/' + compId),
+    loadEvent(tour, evId),
+  ]);
+  const won = (c.competitors || []).find((x) => x.winner);
+  return {
+    date: c.date,
+    tournament: ev.name || '',
+    round: c.round?.description || '',
+    score: scoreFromNote(c.notes?.[0]?.text),
+    winnerId: won?.id || '',
+    winnerName: won?.name || '',
+  };
+}
+
+// ESPN has no head-to-head endpoint. Two players met in every match whose
+// competition id appears in both of their season match lists.
+async function loadHeadToHead(tour, idA, idB) {
+  const thisYear = new Date().getFullYear();
+  const years = [];
+  for (let i = 0; i < H2H_SEASONS; i++) years.push(thisYear - i);
+  const [listsA, listsB] = await Promise.all([
+    Promise.all(years.map((y) => loadEventIds(tour, idA, y))),
+    Promise.all(years.map((y) => loadEventIds(tour, idB, y))),
+  ]);
+  const mapA = Object.assign({}, ...listsA);
+  const mapB = Object.assign({}, ...listsB);
+  const shared = Object.keys(mapA).filter((compId) => compId in mapB);
+  const meetings = await Promise.all(
+    shared.map((compId) => loadMeeting(tour, mapA[compId], compId))
+  );
+  // Drops the match that is being looked at, which has no winner yet
+  return meetings
+    .filter((m) => m.winnerId)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+// Season record of one player; category and stat names come from the feed
+function loadStats(tour, id) {
+  const year = new Date().getFullYear();
+  return getJson(CORE + '/leagues/' + tour + '/seasons/' + year +
+                 '/types/2/athletes/' + id + '/statistics');
+}
+
+function statValue(stats, name) {
+  for (const cat of stats?.splits?.categories || []) {
+    for (const s of cat.stats || []) if (s.name === name) return s.displayValue;
+  }
+  return null;
+}
+
 // Rangliste nur laden, wenn sie fehlt oder älter als die TTL ist
 function ensureRankings(tour) {
   if (!state.rankings[tour] || Date.now() - state.rankingsAt[tour] > RANKINGS_TTL) {
@@ -574,7 +862,8 @@ function matchesFor(tour, discipline, status) {
         const byRound = perKey.get(key);
         const rname = c.round?.displayName || '';
         if (!byRound.has(rname)) byRound.set(rname, []);
-        byRound.get(rname).push({ c, mixed });
+        // evId travels with the match so the card can open its detail view
+        byRound.get(rname).push({ c, mixed, evId: ev.id });
       }
     }
     for (const [key, byRound] of perKey) {
@@ -652,7 +941,7 @@ function rowHtml(comp, status, live) {
     '</div>';
 }
 
-function matchHtml({ c, mixed }) {
+function matchHtml({ c, mixed, evId }) {
   const st = c.status || {};
   const suspended = isSuspended(c);
   // Unterbrochene Matches werden wie laufende dargestellt, nur mit
@@ -680,7 +969,7 @@ function matchHtml({ c, mixed }) {
     if (note) parts.push(esc(note));
   }
   const comps = (c.competitors || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
-  return '<div class="match">' +
+  return '<div class="match" data-comp="' + esc(c.id) + '" data-ev="' + esc(evId || '') + '">' +
     (parts.length ? '<div class="match-meta">' + parts.join(' · ') + '</div>' : '') +
     comps.map((comp) => rowHtml(comp, st, stateCode === 'in')).join('') +
     '</div>';
@@ -745,15 +1034,210 @@ function renderRankings() {
     '</section>';
 }
 
+/* ---------- Detailansicht eines Matches ---------- */
+
+// The card only carries ids; the match itself is read back out of the loaded
+// scoreboard, so the minute refresh keeps an open live view up to date
+function findCompetition(tour, compId) {
+  for (const ev of state.data[tour]?.events || []) {
+    for (const g of ev.groupings || []) {
+      for (const c of g.competitions || []) {
+        if (c.id === compId) return { ev, g, c };
+      }
+    }
+  }
+  return null;
+}
+
+// Every athlete of a match, flattened: singles yields two, doubles four
+function athletesOf(c) {
+  const out = [];
+  for (const comp of (c.competitors || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0))) {
+    if (comp.athlete) out.push(comp.athlete);
+    else for (const a of comp.roster?.athletes || []) out.push(a);
+  }
+  return out;
+}
+
+// Singles competitors carry the athlete id directly; inside a doubles roster
+// it only appears in the player card link
+function athleteId(a) {
+  if (a?.id) return a.id;
+  for (const l of a?.links || []) {
+    const m = (l.href || '').match(/\/id\/(\d+)\//);
+    if (m) return m[1];
+  }
+  return '';
+}
+
+const fmtPrize = new Intl.NumberFormat('en-GB', {
+  style: 'currency', currency: 'USD', maximumFractionDigits: 0,
+});
+
+// Wraps a lazily loaded block: shows its own state instead of blocking the view
+function sectionHtml(title, entry, body) {
+  let inner;
+  if (entry.status === 'loading') inner = '<div class="d-note">Loading …</div>';
+  else if (entry.status === 'error') inner = '<div class="d-note error">' + esc(entry.error) + '</div>';
+  else inner = body(entry.value);
+  return '<section class="d-sec">' + title + inner + '</section>';
+}
+
+function h2hHtml(tour, comps) {
+  const [a, b] = comps.map((x) => x.athlete);
+  const entry = cacheEntry('h2h', tour + ':' + a.id + ':' + b.id,
+    () => loadHeadToHead(tour, a.id, b.id));
+  return sectionHtml('<h3>Head-to-head</h3>', entry, (meetings) => {
+    if (!meetings.length) return '<div class="d-note">No previous meetings on record.</div>';
+    const winsA = meetings.filter((m) => m.winnerId === a.id).length;
+    // Names label the tally, because two bare numbers leave open who is who
+    const tally = '<div class="h2h-tally">' +
+      [[a, winsA], [b, meetings.length - winsA]].map(([p, n]) =>
+        '<span class="lbl">' + esc(p.shortName || p.displayName) + '</span>' +
+        '<span class="val">' + n + '</span>'
+      ).join('') +
+    '</div>';
+    const rows = meetings.map((m) => {
+      const result = m.score
+        ? '<b>' + esc(m.winnerName) + '</b> ' + esc(m.score)
+        : '<b>' + esc(m.winnerName) + '</b>';
+      return '<div class="h2h-row">' +
+        '<div class="h2h-top">' +
+          '<span class="h2h-year">' + new Date(m.date).getFullYear() + '</span>' +
+          '<span class="h2h-event">' + esc(m.tournament) + '</span>' +
+          '<span class="h2h-round">' + esc(roundLabel(m.round)) + '</span>' +
+        '</div>' +
+        '<div class="h2h-result">' + result + '</div>' +
+      '</div>';
+    }).join('');
+    return tally + rows;
+  });
+}
+
+// One card per player: world ranking, season record and profile
+function playerHtml(tour, athlete) {
+  const id = athleteId(athlete);
+  const flagUrl = athlete.flag?.href;
+  const head = '<div class="d-player-name">' +
+    (flagUrl ? '<img class="flag" loading="lazy" src="' + esc(flagUrl) + '" alt="">' : '') +
+    esc(athlete.displayName || athlete.shortName || '–') + '</div>';
+  if (!id) return '<div class="d-player">' + head + '</div>';
+
+  const profile = cacheEntry('athletes', id, () => getJson(CORE + '/athletes/' + id));
+  const stats = cacheEntry('stats', tour + ':' + id, () => loadStats(tour, id));
+
+  const facts = [];
+  // Ranking comes from the rankings feed the app already loads (singles top 150)
+  const rank = (state.rankings[tour]?.ranks || []).find((r) => r.athlete?.id === id);
+  if (rank) facts.push(['World ranking', '#' + rank.current + ' · ' + fmtPoints.format(rank.points) + ' pts']);
+
+  if (stats.status === 'ok') {
+    const won = statValue(stats.value, 'singlesWon');
+    const lost = statValue(stats.value, 'singlesLost');
+    // The feed counts singles only, so a doubles specialist stands at 0–0 here
+    if (won != null && lost != null) facts.push(['Singles won–lost', won + '–' + lost]);
+    const titles = statValue(stats.value, 'singlesTitles');
+    if (titles != null) facts.push(['Singles titles', titles]);
+    const dTitles = statValue(stats.value, 'doublesTitles');
+    if (dTitles != null) facts.push(['Doubles titles', dTitles]);
+    const prize = statValue(stats.value, 'prize');
+    if (prize != null) facts.push(['Season prize money', fmtPrize.format(Number(prize))]);
+  } else if (stats.status === 'error') {
+    facts.push(['Season', stats.error]);
+  }
+
+  if (profile.status === 'ok') {
+    const p = profile.value;
+    if (p.age != null) facts.push(['Age', p.age]);
+    if (p.hand?.displayValue) facts.push(['Plays', p.hand.displayValue + '-handed']);
+    if (p.displayHeight) facts.push(['Height', p.displayHeight]);
+    if (p.birthPlace?.summary) facts.push(['Born', p.birthPlace.summary]);
+    if (p.debutYear) facts.push(['Turned pro', p.debutYear]);
+  } else if (profile.status === 'error') {
+    facts.push(['Profile', profile.error]);
+  }
+  const loading = profile.status === 'loading' || stats.status === 'loading';
+
+  return '<div class="d-player">' + head +
+    '<div class="d-facts">' +
+      facts.map(([l, v]) =>
+        '<span class="lbl">' + esc(l) + '</span><span class="val">' + esc(v) + '</span>'
+      ).join('') +
+    '</div>' +
+    (loading ? '<div class="d-note">Loading …</div>' : '') +
+  '</div>';
+}
+
+function renderDetail() {
+  const el = document.getElementById('detail');
+  if (!state.detail) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+  // The view is redrawn by the minute refresh and by every block that finishes
+  // loading; without this the reader would be thrown back to the top each time
+  const keepScroll = el.scrollTop;
+  const { tour, compId } = state.detail;
+  const found = findCompetition(tour, compId);
+  const bar = '<div class="detail-bar">' +
+    '<button class="detail-close" type="button" aria-label="Close">✕</button>' +
+    '<span class="detail-title">' + esc(found?.ev.name || 'Match') + '</span>' +
+  '</div>';
+  el.hidden = false;
+  if (!found) {
+    el.innerHTML = '<div class="detail-inner">' + bar +
+      '<div class="hint">This match is no longer in the feed.</div></div>';
+    return;
+  }
+
+  const { c } = found;
+  const st = c.status || {};
+  const suspended = isSuspended(c);
+  const stateCode = suspended ? 'in' : st.type?.state;
+  const comps = (c.competitors || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  // Same meta line as on the card, plus the venue the card leaves to the header
+  const meta = [];
+  if (c.round?.displayName) meta.push(esc(roundLabel(c.round.displayName)));
+  if ((c.venue?.court || '').trim()) meta.push(esc(c.venue.court.trim()));
+  if (found.ev.venue?.fullName) meta.push(esc(found.ev.venue.fullName));
+  if (suspended) meta.push('<span class="susp-badge">Suspended</span>');
+  else if (stateCode === 'in') meta.push('<span class="live-badge"><span class="live-dot"></span>LIVE</span>');
+  else if (stateCode === 'pre') meta.push(esc(formatStart(c.date, c.timeValid)));
+  else {
+    meta.push(esc(fmtDay.format(new Date(c.date))));
+    const note = finishedNote(st.type);
+    if (note) meta.push(esc(note));
+  }
+
+  const score = '<section class="d-sec">' +
+    '<div class="match-meta">' + meta.join(' · ') + '</div>' +
+    comps.map((comp) => rowHtml(comp, st, stateCode === 'in')).join('') +
+  '</section>';
+
+  // Head-to-head needs one athlete per side; doubles teams have no pair record
+  const singles = comps.length === 2 && comps.every((x) => x.athlete);
+  const h2h = singles ? h2hHtml(tour, comps) : '';
+  const players = '<section class="d-sec"><h3>Players</h3>' +
+    athletesOf(c).map((a) => playerHtml(tour, a)).join('') +
+  '</section>';
+
+  el.innerHTML = '<div class="detail-inner">' + bar + score + h2h + players + '</div>';
+  el.scrollTop = keepScroll;
+}
+
 function render() {
   if (state.status === 'rankings') {
     renderRankings();
+    renderDetail();
     return;
   }
   const content = document.getElementById('content');
   const buckets = matchesFor(state.tour, state.discipline, state.status);
   if (buckets === null) {
     content.innerHTML = '<div class="hint">' + (state.error ? esc(state.error) : 'Loading scores …') + '</div>';
+    renderDetail();
     return;
   }
   content.innerHTML = buckets.length
@@ -762,6 +1246,7 @@ function render() {
         b.groups.map(tournamentHtml).join('')
       ).join('')
     : '<div class="hint">' + EMPTY[state.status] + '</div>';
+  renderDetail();
 }
 
 // Kopfzeile: aktive Schalter, Live-Zähler, Lade-Anzeige, Zeitstempel, Fehler
@@ -814,6 +1299,40 @@ function select(key, val) {
 document.querySelectorAll('[data-key] button').forEach((b) => {
   b.addEventListener('click', () => select(b.closest('[data-key]').dataset.key, b.dataset.val));
 });
+
+// Scroll position of the list while a detail view covers it
+let listScroll = 0;
+
+function openDetail(evId, compId) {
+  listScroll = window.scrollY;
+  state.detail = { tour: state.tour, evId, compId };
+  // A history entry makes the browser back gesture close the view; in the
+  // standalone app, where that gesture is missing, the ✕ button does it
+  history.pushState({ detail: compId }, '');
+  document.body.classList.add('detail-open');
+  renderDetail();
+  // The rankings feed carries the world ranking shown per player
+  ensureRankings(state.tour);
+}
+
+function closeDetail(fromHistory) {
+  if (!state.detail) return;
+  state.detail = null;
+  document.body.classList.remove('detail-open');
+  renderDetail();
+  if (!fromHistory) history.back();
+  window.scrollTo(0, listScroll);
+}
+
+// One delegated listener instead of one per card
+document.getElementById('content').addEventListener('click', (e) => {
+  const card = e.target.closest('.match');
+  if (card?.dataset.comp) openDetail(card.dataset.ev, card.dataset.comp);
+});
+document.getElementById('detail').addEventListener('click', (e) => {
+  if (e.target.closest('.detail-close')) closeDetail(false);
+});
+window.addEventListener('popstate', () => closeDetail(true));
 document.getElementById('refreshBtn').addEventListener('click', () =>
   state.status === 'rankings' ? refreshRankings() : refresh());
 
