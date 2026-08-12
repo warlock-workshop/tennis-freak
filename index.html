@@ -514,18 +514,28 @@
     font-size: 13px;
   }
   .h2h-round { flex: none; color: var(--muted); font-size: 11px; }
-  /* Opponent on its own line, score beneath it. Both start at the left edge
-     rather than indented under the tournament, which gives the long scores
-     the full width instead of squeezing them into what is left */
+  /* Opponent left, score right on one line. The score keeps its natural
+     width and the name takes what is left, so a five-set score is never the
+     thing that gets cut */
   .h2h-versus {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
     margin-top: 6px;
     font-size: 14px;
     color: var(--text);
   }
-  .h2h-versus b { font-weight: 700; }
+  .h2h-who {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .h2h-who b { font-weight: 700; }
   .h2h-verb { color: var(--muted); }
   .h2h-score {
-    margin-top: 3px;
+    flex: none;
     font-size: 12.5px;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
@@ -1332,26 +1342,38 @@ function flipScore(score) {
   return score.replace(/(\d+)-(\d+)/g, '$2-$1');
 }
 
+// The core interface gives full names where the scoreboard gives short ones.
+// ESPN's own rule is applied so both read alike: the first name becomes an
+// initial and the rest stands, which keeps compound surnames intact
+// ("Botic Van De Zandschulp" stays "B. Van De Zandschulp").
+function shortenName(name) {
+  const parts = String(name || '').trim().split(/\s+/);
+  if (parts.length < 2) return name || '';
+  return parts[0].charAt(0) + '. ' + parts.slice(1).join(' ');
+}
+
 // One past match. `when` fills the left column: the year in a head-to-head,
 // the date in a list where every match is from the same season. With a
 // subject the row is written from that player's side, naming the opponent
 // and saying how it went – in their own profile the winner alone would be
 // their own name over and over, which says nothing.
 function meetingRowHtml(m, when, subjectId) {
-  let result;
+  let who;
+  let score;
   if (subjectId) {
     const other = (m.players || []).find((p) => p.id !== subjectId);
     const won = m.winnerId === subjectId;
-    const score = won ? m.score : flipScore(m.score);
-    result = '<div class="h2h-versus">' +
-        '<span class="h2h-verb">' + (won ? 'def.' : 'lost to') + '</span> ' +
-        esc(other?.name || 'Unknown') +
-      '</div>' +
-      (score ? '<div class="h2h-score">' + esc(score) + '</div>' : '');
+    score = won ? m.score : flipScore(m.score);
+    who = '<span class="h2h-verb">' + (won ? 'def.' : 'lost to') + '</span> ' +
+      esc(shortenName(other?.name) || 'Unknown');
   } else {
-    result = '<div class="h2h-versus"><b>' + esc(m.winnerName) + '</b></div>' +
-      (m.score ? '<div class="h2h-score">' + esc(m.score) + '</div>' : '');
+    score = m.score;
+    who = '<b>' + esc(shortenName(m.winnerName)) + '</b>';
   }
+  const result = '<div class="h2h-versus">' +
+    '<span class="h2h-who">' + who + '</span>' +
+    '<span class="h2h-score">' + esc(score) + '</span>' +
+  '</div>';
   return '<div class="h2h-row">' +
     '<div class="h2h-top">' +
       '<span class="h2h-year">' + esc(when) + '</span>' +
