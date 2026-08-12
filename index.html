@@ -476,6 +476,17 @@
   .d-note { color: var(--muted); font-size: 12px; padding: 2px 4px; }
   .d-note.error { color: var(--live); font-weight: 600; }
 
+  /* A block appears only once it is complete, and rides in from below to dock
+     under what is already there. Nothing above it moves, so the view settles
+     instead of rearranging itself. */
+  @keyframes dock {
+    from { opacity: 0; transform: translateY(8px); }
+  }
+  .d-sec.enter { animation: dock 200ms cubic-bezier(0.32, 0.72, 0, 1); }
+  @media (prefers-reduced-motion: reduce) {
+    .d-sec.enter { animation: none; }
+  }
+
   /* Head-to-head: named tally first, then one row per meeting */
   .h2h-tally {
     display: grid;
@@ -1326,13 +1337,31 @@ const fmtPrize = new Intl.NumberFormat('en-GB', {
   style: 'currency', currency: 'USD', maximumFractionDigits: 0,
 });
 
-// Wraps a lazily loaded block: shows its own state instead of blocking the view
-function sectionHtml(title, entry, body) {
-  let inner;
-  if (entry.status === 'loading') inner = '<div class="d-note">Loading …</div>';
-  else if (entry.status === 'error') inner = '<div class="d-note error">' + esc(entry.error) + '</div>';
-  else inner = body(entry.value);
-  return '<section class="d-sec">' + title + inner + '</section>';
+// Wraps a lazily loaded block. While it is outstanding the block is absent
+// altogether rather than standing there as a placeholder that later changes
+// height and shoves everything below it down.
+function sectionHtml(key, title, entry, body) {
+  if (entry.status === 'loading') return '';
+  const inner = entry.status === 'error'
+    ? '<div class="d-note error">' + esc(entry.error) + '</div>'
+    : body(entry.value);
+  return '<section class="d-sec" data-key="' + key + '">' + title + inner + '</section>';
+}
+
+// Which blocks have already docked in the open sheet. Without this the whole
+// view is rewritten on every arrival and the blocks already standing would
+// ride in again each time.
+let shownSections = new Set();
+let sheetOpening = false;
+
+function markSections(el) {
+  el.querySelectorAll('.d-sec[data-key]').forEach((s) => {
+    const key = s.dataset.key;
+    if (shownSections.has(key)) return;
+    shownSections.add(key);
+    // What is there from the start rides in with the sheet itself
+    if (!sheetOpening) s.classList.add('enter');
+  });
 }
 
 // ESPN writes the score from the winner's side, so on a losing player's own
@@ -1388,7 +1417,7 @@ function h2hHtml(tour, comps) {
   const [a, b] = comps.map((x) => x.athlete);
   const entry = cacheEntry('h2h', tour + ':' + a.id + ':' + b.id,
     () => loadHeadToHead(tour, a.id, b.id));
-  return sectionHtml('<h3>Head-to-head</h3>', entry, (meetings) => {
+  return sectionHtml('h2h', '<h3>Head-to-head</h3>', entry, (meetings) => {
     if (!meetings.length) return '<div class="d-note">No previous meetings on record.</div>';
     const winsA = meetings.filter((m) => m.winnerId === a.id).length;
     // Names label the tally, because two bare numbers leave open who is who
@@ -1409,7 +1438,7 @@ const fmtDayMonth = new Intl.DateTimeFormat('en-GB', {
 
 function recentHtml(tour, id) {
   const entry = cacheEntry('recent', tour + ':' + id, () => loadRecentMatches(tour, id));
-  return sectionHtml('<h3>Recent matches</h3>', entry, (matches) => {
+  return sectionHtml('recent', '<h3>Recent matches</h3>', entry, (matches) => {
     if (!matches.length) return '<div class="d-note">No completed matches on record.</div>';
     return matches.map((m) =>
       meetingRowHtml(m, fmtDayMonth.format(new Date(m.date)), id)).join('');
@@ -1417,6 +1446,16 @@ function recentHtml(tour, id) {
 }
 
 // One card per player: world ranking, season record and profile
+// True once both halves of a card have landed. Reading them here also starts
+// the two loads, which is why it is called before anything is drawn.
+function playerReady(tour, athlete) {
+  const id = athleteId(athlete);
+  if (!id) return true;
+  const profile = cacheEntry('athletes', id, () => getJson(CORE + '/athletes/' + id));
+  const stats = cacheEntry('stats', tour + ':' + id, () => loadStats(tour, id));
+  return profile.status !== 'loading' && stats.status !== 'loading';
+}
+
 // withName is off where the view already carries the name in its title bar,
 // so a single player's profile does not repeat it
 function playerHtml(tour, athlete, withName = true) {
@@ -1462,15 +1501,12 @@ function playerHtml(tour, athlete, withName = true) {
   } else if (profile.status === 'error') {
     facts.push(['Profile', profile.error]);
   }
-  const loading = profile.status === 'loading' || stats.status === 'loading';
-
   return '<div class="d-player">' + head +
     '<div class="d-facts">' +
       facts.map(([l, v]) =>
         '<span class="lbl">' + esc(l) + '</span><span class="val">' + esc(v) + '</span>'
       ).join('') +
     '</div>' +
-    (loading ? '<div class="d-note">Loading …</div>' : '') +
   '</div>';
 }
 
@@ -1493,10 +1529,13 @@ function renderDetail() {
         (a.flag?.href ? '<img class="flag" src="' + esc(a.flag.href) + '" alt="">' : '') +
         '<span class="detail-title">' + esc(a.displayName) + '</span>' +
       '</div>' +
-      '<section class="d-sec">' + playerHtml(tour, a, false) + '</section>' +
+      (playerReady(tour, a)
+        ? '<section class="d-sec" data-key="player">' + playerHtml(tour, a, false) + '</section>'
+        : '') +
       recentHtml(tour, a.id) +
     '</div>';
     el.scrollTop = keepScroll;
+    markSections(el);
     return;
   }
 
@@ -1531,7 +1570,7 @@ function renderDetail() {
     if (note) meta.push(esc(note));
   }
 
-  const score = '<section class="d-sec">' +
+  const score = '<section class="d-sec" data-key="score">' +
     '<div class="match-meta">' + meta.join(' · ') + '</div>' +
     comps.map((comp) => rowHtml(comp, st, stateCode === 'in')).join('') +
   '</section>';
@@ -1539,12 +1578,17 @@ function renderDetail() {
   // Head-to-head needs one athlete per side; doubles teams have no pair record
   const singles = comps.length === 2 && comps.every((x) => x.athlete);
   const h2h = singles ? h2hHtml(tour, comps) : '';
-  const players = '<section class="d-sec"><h3>Players</h3>' +
-    athletesOf(c).map((a) => playerHtml(tour, a)).join('') +
-  '</section>';
+  // The block waits for every card in it, so it docks in one piece
+  const athletes = athletesOf(c);
+  const players = athletes.every((a) => playerReady(tour, a))
+    ? '<section class="d-sec" data-key="players"><h3>Players</h3>' +
+      athletes.map((a) => playerHtml(tour, a)).join('') +
+    '</section>'
+    : '';
 
   el.innerHTML = '<div class="detail-inner">' + bar + score + h2h + players + '</div>';
   el.scrollTop = keepScroll;
+  markSections(el);
 }
 
 function render() {
@@ -1654,7 +1698,12 @@ function showDetail() {
   const el = document.getElementById('detail');
   clearTimeout(sheetTimer);
   document.body.classList.add('detail-open');
+  // Blocks present at this point belong to the sheet's own entrance and must
+  // not ride in a second time on top of it
+  shownSections = new Set();
+  sheetOpening = true;
   renderDetail();
+  sheetOpening = false;
   el.hidden = false;
   void el.offsetHeight;
   el.classList.add('open');
