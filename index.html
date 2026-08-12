@@ -266,12 +266,16 @@
 
   /* ---------- Statuszeile ---------- */
   /* Sits inside the scroller, so it lines up with the day headings rather
-     than with the edge of the frame */
+     than with the edge of the frame. The 8px below matches main's padding
+     above it, which is the gap to the header. */
   .statusline {
-    padding: 0 4px 2px;
+    padding: 0 4px 8px;
     font-size: 11px;
     color: var(--muted);
   }
+  /* The first heading brings its own top margin, which would add to that gap
+     and make the space below the status line larger than the space above */
+  #content > :first-child { margin-top: 0; }
   .statusline .error { color: var(--live); font-weight: 600; }
 
   /* ---------- Inhalt: Matches nach Turnier gruppiert ---------- */
