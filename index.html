@@ -120,6 +120,11 @@
     z-index: 20;
     display: flex;
     gap: 2px;
+    /* Width comes from the screen, not from the labels, so the bar keeps its
+       size and place whether or not the live badge is showing. 80% leaves air
+       at both sides, which is what makes it read as floating. */
+    width: 80%;
+    max-width: 360px;
     padding: 3px;
     border-radius: 999px;
     background: rgba(30, 44, 72, 0.55);
@@ -130,6 +135,10 @@
                 inset 0 1px 0 rgba(255, 255, 255, 0.10);
   }
   .bottombar button {
+    /* Equal shares of the bar; side padding would only take room from the
+       labels now that the width no longer follows them */
+    flex: 1;
+    position: relative;
     border: none;
     background: transparent;
     color: #c3cce0;
@@ -137,7 +146,7 @@
     font-size: 12px;
     /* ~36pt tall, up from ~30pt; still short of Apple's 44pt guideline, but
        the bar floats over the content and would go bulky at full height */
-    padding: 10px 10px;
+    padding: 10px 4px;
     border-radius: 999px;
     cursor: pointer;
     white-space: nowrap;
@@ -206,17 +215,21 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* Anzahl der Live-Matches als kleine rote Marke im "Live"-Tab */
+  /* Sits free over the top right corner of its button rather than in the
+     line, so the word "Live" does not shift sideways when a match starts */
   .count {
+    position: absolute;
+    top: 1px;
+    right: 2px;
     background: var(--live);
     color: #fff;
     border-radius: 8px;
-    font-size: 10px;
-    padding: 1px 5px;
-    vertical-align: 2px;
+    font-size: 9px;
+    line-height: 1.5;
+    font-weight: 700;
+    min-width: 15px;
+    padding: 0 4px;
   }
-  /* The active tab is no longer a filled accent, so the badge keeps its
-     own colours there instead of inverting into it */
-  .bottombar button.active .count { background: var(--live); color: #fff; }
 
   /* ---------- Statuszeile ---------- */
   .statusline {
