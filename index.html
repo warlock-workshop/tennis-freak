@@ -1061,6 +1061,7 @@ async function loadMeeting(tour, evId, compId) {
   }));
   const won = players.find((x) => x.winner);
   return {
+    id: compId,
     date: c.date,
     tournament: name,
     round: c.round?.description || '',
@@ -1463,16 +1464,32 @@ function meetingRowHtml(m, when, subjectId) {
   '</div>';
 }
 
-function h2hHtml(tour, comps) {
+function h2hHtml(tour, comps, compId) {
+  // The id sits on the competitor. Its athlete object carries the names and
+  // the flag but no id of its own, which is worth spelling out because
+  // reading it from there fails quietly: the request goes out with
+  // "undefined" in it, answers 404, and reads as "no previous meetings".
+  const [idA, idB] = comps.map((x) => x.id || athleteId(x.athlete));
   const [a, b] = comps.map((x) => x.athlete);
-  const entry = cacheEntry('h2h', tour + ':' + a.id + ':' + b.id,
-    () => loadHeadToHead(tour, a.id, b.id));
-  return sectionHtml('h2h', '<h3>Head-to-head</h3>', entry, (meetings) => {
+  const entry = cacheEntry('h2h', tour + ':' + idA + ':' + idB,
+    () => loadHeadToHead(tour, idA, idB));
+  return sectionHtml('h2h', '<h3>Head-to-head</h3>', entry, (all) => {
+    // Two filters. The match being looked at is a meeting of these two like
+    // any other and comes back with the rest; under it, "head-to-head" means
+    // the ones before. And a doubles match the two played on opposite teams
+    // sits in both their event logs as well, so only competitions whose two
+    // sides are these two players count.
+    const meetings = all.filter((m) => m.id !== compId &&
+      m.players.length === 2 &&
+      m.players.every((p) => p.id === idA || p.id === idB));
     if (!meetings.length) return '<div class="d-note">No previous meetings on record.</div>';
-    const winsA = meetings.filter((m) => m.winnerId === a.id).length;
+    // Counted from both sides rather than one from the other: a match won by
+    // neither of them would otherwise land on whoever is second
+    const winsA = meetings.filter((m) => m.winnerId === idA).length;
+    const winsB = meetings.filter((m) => m.winnerId === idB).length;
     // Names label the tally, because two bare numbers leave open who is who
     const tally = '<div class="h2h-tally">' +
-      [[a, winsA], [b, meetings.length - winsA]].map(([p, n]) =>
+      [[a, winsA], [b, winsB]].map(([p, n]) =>
         '<span class="lbl">' + esc(p.shortName || p.displayName) + '</span>' +
         '<span class="val">' + n + '</span>'
       ).join('') +
@@ -1627,7 +1644,7 @@ function renderDetail() {
 
   // Head-to-head needs one athlete per side; doubles teams have no pair record
   const singles = comps.length === 2 && comps.every((x) => x.athlete);
-  const h2h = singles ? h2hHtml(tour, comps) : '';
+  const h2h = singles ? h2hHtml(tour, comps, compId) : '';
   // The block waits for every card in it, so it docks in one piece
   const athletes = athletesOf(c);
   const players = athletes.every((a) => playerReady(tour, a))
