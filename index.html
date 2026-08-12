@@ -572,29 +572,24 @@
     .d-sec.enter { animation: none; }
   }
 
-  /* Head-to-head: named tally first, the matches behind it on request */
-  .h2h-toggle {
+  /* Head-to-head: the heading line is the control, since the tally under it
+     is a reading and not something to press */
+  .h2h-head {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 0 4px 8px;
-    margin-bottom: 4px;
-    border-bottom: 1px solid var(--border);
+    justify-content: space-between;
     cursor: pointer;
   }
-  .h2h-toggle:active { background: rgba(255, 255, 255, 0.05); }
-  .h2h-chev {
-    flex: none;
-    color: var(--muted);
-    transition: transform 180ms ease-out;
-  }
-  .h2h-toggle.open .h2h-chev { transform: rotate(180deg); }
+  .h2h-head:active { opacity: 0.6; }
+  .h2h-chev { flex: none; transition: transform 180ms ease-out; }
+  .h2h-head.open .h2h-chev { transform: rotate(180deg); }
   .h2h-tally {
-    flex: 1;
-    min-width: 0;
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 2px 10px;
+    padding: 0 4px 8px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border);
   }
   .h2h-tally .lbl { font-size: 13.5px; font-weight: 700; }
   .h2h-tally .val {
@@ -1544,7 +1539,11 @@ function h2hHtml(tour, comps, compId) {
   const [a, b] = comps.map((x) => x.athlete);
   const entry = cacheEntry('h2h', tour + ':' + idA + ':' + idB,
     () => loadHeadToHead(tour, idA, idB));
-  return sectionHtml('h2h', '<h3>Head-to-head</h3>', entry, (all) => {
+  const heading = '<h3 class="h2h-head' + (h2hOpen ? ' open' : '') + '">Head-to-head' +
+    '<svg class="h2h-chev" width="15" height="15" viewBox="0 0 24 24" fill="none" ' +
+      'stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>' +
+  '</h3>';
+  return sectionHtml('h2h', heading, entry, (all) => {
     // A doubles match the two played on opposite teams sits in both their
     // event logs, so only competitions whose two sides are these two players
     // count. The match being looked at counts once it is decided, which needs
@@ -1560,15 +1559,11 @@ function h2hHtml(tour, comps, compId) {
     // Names label the tally, because two bare numbers leave open who is who
     // The tally is the answer; the individual matches are the detail behind
     // it, so they wait until asked for
-    const tally = '<div class="h2h-toggle' + (h2hOpen ? ' open' : '') + '">' +
-      '<div class="h2h-tally">' +
-        [[a, winsA], [b, winsB]].map(([p, n]) =>
-          '<span class="lbl">' + esc(p.shortName || p.displayName) + '</span>' +
-          '<span class="val">' + n + '</span>'
-        ).join('') +
-      '</div>' +
-      '<svg class="h2h-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" ' +
-        'stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>' +
+    const tally = '<div class="h2h-tally">' +
+      [[a, winsA], [b, winsB]].map(([p, n]) =>
+        '<span class="lbl">' + esc(p.shortName || p.displayName) + '</span>' +
+        '<span class="val">' + n + '</span>'
+      ).join('') +
     '</div>';
     if (!h2hOpen) return tally;
     return tally + meetings.map((m) => meetingRowHtml(m, new Date(m.date).getFullYear())).join('');
@@ -1907,7 +1902,7 @@ function toggleH2h() {
 
 document.getElementById('detail').addEventListener('click', (e) => {
   if (e.target.closest('.detail-close')) return closeDetail(false);
-  if (e.target.closest('.h2h-toggle')) toggleH2h();
+  if (e.target.closest('.h2h-head')) toggleH2h();
 });
 window.addEventListener('popstate', () => closeDetail(true));
 /* ---------- Ziehen zum Aktualisieren ---------- */
