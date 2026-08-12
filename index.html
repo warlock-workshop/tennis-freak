@@ -42,16 +42,27 @@
     font-size: 15px;
     line-height: 1.35;
     -webkit-text-size-adjust: 100%;
+    /* Fixed app frame: the page itself does not scroll, only <main> does.
+       That puts the scrollbar under the header instead of alongside it, and
+       a page that cannot scroll cannot rubber-band either, so the header
+       stays put when you swipe down at the top.
+       Known cost, learned in June (1f1c31b, reverted by 1ed36ab): Safari
+       only collapses its toolbar when the page scrolls, so in the browser
+       it stays expanded. Launched from the home screen there is no toolbar. */
+    height: 100vh;                    /* fallback for older iOS */
+    height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   /* ---------- Kopfbereich (sticky): drei kompakte Schalter-Reihen ---------- */
+  /* Part of the frame rather than something that floats over the list, so it
+     needs no translucency: nothing passes underneath it any more */
   header {
-    position: sticky;
-    top: 0;
+    flex: none;
     z-index: 10;
-    background: rgba(11, 17, 32, 0.93);
-    -webkit-backdrop-filter: blur(10px);
-    backdrop-filter: blur(10px);
+    background: var(--bg);
     border-bottom: 1px solid var(--border);
     /* Platz für die iOS-Statusleiste im Standalone-Modus */
     padding: calc(8px + env(safe-area-inset-top)) 10px 8px;
@@ -244,6 +255,7 @@
 
   /* ---------- Statuszeile ---------- */
   .statusline {
+    flex: none;
     padding: 6px 12px 0;
     font-size: 11px;
     color: var(--muted);
@@ -251,7 +263,12 @@
   .statusline .error { color: var(--live); font-weight: 600; }
 
   /* ---------- Inhalt: Matches nach Turnier gruppiert ---------- */
+  /* The one scrolling element in the app */
   main {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: none;
+    width: 100%;
     max-width: 640px;
     margin: 0 auto;
     /* Unten Platz lassen, damit die letzte Karte über der Glass-Bar endet */
@@ -1671,7 +1688,7 @@ function select(key, val) {
   void content.offsetWidth;
   content.classList.add('settle');
   // Beim Ansichtswechsel oben beginnen (Auto-Refresh behält die Position)
-  window.scrollTo(0, 0);
+  document.querySelector('main').scrollTop = 0;
   // Beim Tour-Wechsel nachladen, falls die Daten fehlen oder veraltet sind
   if (key === 'tour' && (!state.data[val] || Date.now() - state.fetchedAt[val] > REFRESH_MS)) {
     refresh(val);
@@ -1688,7 +1705,7 @@ document.querySelectorAll('[data-key] button').forEach((b) => {
 let listScroll = 0;
 
 function openDetail(evId, compId) {
-  listScroll = window.scrollY;
+  listScroll = document.querySelector('main').scrollTop;
   state.detail = { tour: state.tour, evId, compId };
   // A history entry makes the browser back gesture close the view; in the
   // standalone app, where that gesture is missing, the ✕ button does it
@@ -1730,7 +1747,7 @@ function closeDetail(fromHistory) {
   clearTimeout(sheetTimer);
   sheetTimer = setTimeout(() => { el.hidden = true; el.innerHTML = ''; }, SHEET_MS);
   if (!fromHistory) history.back();
-  window.scrollTo(0, listScroll);
+  document.querySelector('main').scrollTop = listScroll;
 }
 
 // Opens the player behind a ranking row. Name and flag are taken from the
@@ -1739,7 +1756,7 @@ function closeDetail(fromHistory) {
 function openPlayer(id) {
   const entry = (state.rankings[state.tour]?.ranks || []).find((r) => r.athlete?.id === id);
   const a = entry?.athlete || {};
-  listScroll = window.scrollY;
+  listScroll = document.querySelector('main').scrollTop;
   state.detail = {
     tour: state.tour,
     athlete: {
