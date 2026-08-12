@@ -1684,6 +1684,10 @@ function updateChrome() {
   const status = document.getElementById('status');
   const ts = state.fetchedAt[state.tour];
   let html = ts ? 'Updated ' + fmtClock.format(new Date(ts)) : '';
+  // Which build is actually running. An installed web app holds on to its
+  // HTML, and the refresh button only fetches scores, so without this there
+  // is no way to tell a stale page from a current one.
+  html += (html ? ' · ' : '') + 'v' + esc(APP_VERSION);
   if (state.error) html += (html ? ' · ' : '') + '<span class="error">' + esc(state.error) + '</span>';
   status.innerHTML = html;
 }
