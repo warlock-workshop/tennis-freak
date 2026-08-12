@@ -30,6 +30,11 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
+  /* A tap leaves focus on the button, which parked the browser's focus ring
+     on the active tab next to its own marker. The ring stays for keyboard
+     use, where it is the only cue that says where you are */
+  button:focus { outline: none; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   body {
     background: var(--bg);
     color: var(--text);
@@ -149,11 +154,13 @@
   }
 
   /* ---------- Weltrangliste ---------- */
+  /* 12px vertical brings the row to about 43pt, near Apple's 44pt guideline
+     for anything tappable; it was 31pt back when the row only displayed */
   .rank-row {
     display: flex;
     align-items: center;
     gap: 7px;
-    padding: 6px 4px;
+    padding: 12px 4px;
     border-bottom: 1px solid var(--border);
   }
   .rank-row:last-child { border-bottom: none; }
@@ -255,7 +262,7 @@
     background: var(--card);
     border-radius: 12px;
     margin-bottom: 12px;
-    padding: 2px 12px 6px;
+    padding: 2px 12px 12px;
   }
   .tournament > h2 {
     font-size: 14.5px;
