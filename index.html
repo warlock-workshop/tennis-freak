@@ -54,8 +54,6 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    /* Anchor for the floating bar, so it hangs off the frame */
-    position: relative;
   }
 
   /* ---------- Kopfbereich (sticky): drei kompakte Schalter-Reihen ---------- */
@@ -128,12 +126,8 @@
   }
 
   /* Status-Wahl: schwebende "Liquid Glass"-Leiste am unteren Rand */
-  /* Hangs off the frame rather than the viewport. Fixed positioning left it
-     at the mercy of Safari's own bottom toolbar, which pushed it up in short
-     views; the frame is a box the browser has no say over. The list still
-     runs underneath it, so the glass keeps something to look through. */
   .bottombar {
-    position: absolute;
+    position: fixed;
     left: 50%;
     transform: translateX(-50%);
     bottom: calc(12px + env(safe-area-inset-bottom));
