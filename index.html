@@ -726,10 +726,6 @@
   <button data-val="rankings" role="tab">Rankings</button>
 </nav>
 
-<!-- TEMPORARY: measures env(safe-area-inset-bottom), which JavaScript cannot
-     read directly. Remove together with the readout in updateChrome(). -->
-<div id="sabProbe" style="position:fixed;left:0;bottom:0;width:0;height:env(safe-area-inset-bottom);visibility:hidden"></div>
-
 <!-- Detail view of a single match; filled by renderDetail(), hidden while closed -->
 <div id="detail" class="detail" hidden></div>
 
@@ -1667,22 +1663,6 @@ function render() {
   renderDetail();
 }
 
-// TEMPORARY diagnostic. vp is the height the browser reports for the viewport,
-// body is how tall the frame actually renders, main is visible/total content
-// height, sab is the bottom safe area, scr the physical screen. If body is
-// short of vp the frame is the problem; if they match, the strip at the end of
-// the list is main's own bottom padding.
-function measurements() {
-  const round = (n) => Math.round(n);
-  const m = document.querySelector('main');
-  const sab = document.getElementById('sabProbe').getBoundingClientRect().height;
-  return 'vp' + round(window.innerHeight) +
-    ' body' + round(document.body.getBoundingClientRect().height) +
-    ' main' + round(m.clientHeight) + '/' + round(m.scrollHeight) +
-    ' sab' + round(sab) +
-    ' scr' + round(window.screen.height);
-}
-
 // Kopfzeile: aktive Schalter, Live-Zähler, Lade-Anzeige, Zeitstempel, Fehler
 function updateChrome() {
   document.querySelectorAll('[data-key]').forEach((group) => {
@@ -1717,9 +1697,6 @@ function updateChrome() {
   // HTML, and the refresh button only fetches scores, so without this there
   // is no way to tell a stale page from a current one.
   html += (html ? ' · ' : '') + 'v' + esc(APP_VERSION);
-  // TEMPORARY: is the frame short of the viewport, or is the gap at the end
-  // of the list simply main's own bottom padding? Remove with #sabProbe.
-  html += ' · ' + measurements();
   if (state.error) html += (html ? ' · ' : '') + '<span class="error">' + esc(state.error) + '</span>';
   status.innerHTML = html;
 }
