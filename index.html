@@ -581,8 +581,15 @@
     cursor: pointer;
   }
   .h2h-head:active { opacity: 0.6; }
-  .h2h-chev { flex: none; transition: transform 180ms ease-out; }
-  .h2h-head.open .h2h-chev { transform: rotate(180deg); }
+  /* Folds through a quarter turn rather than flipping over: pointing left
+     while folded, back towards the heading it belongs to, and turning down
+     as it opens */
+  .h2h-chev {
+    flex: none;
+    transform: rotate(90deg);
+    transition: transform 180ms ease-out;
+  }
+  .h2h-head.open .h2h-chev { transform: rotate(0deg); }
   .h2h-tally {
     display: grid;
     grid-template-columns: 1fr auto;
