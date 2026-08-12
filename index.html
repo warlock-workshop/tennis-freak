@@ -237,9 +237,40 @@
     flex: none;
     cursor: pointer;
   }
-  #refreshBtn.spinning svg { animation: spin 0.9s linear infinite; }
   #refreshBtn svg { display: block; margin: auto; }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  /* The squash at the lowest point is what turns a moving ball into a
+     bouncing one. The keyframes are spaced so it falls quickly and rises
+     slowly, which is what gravity looks like. */
+  @keyframes ballBounce {
+    0%   { transform: translateY(-4px) scale(1, 1); }
+    40%  { transform: translateY(2px)  scale(1, 1); }
+    48%  { transform: translateY(3px)  scale(1.18, 0.82); }
+    58%  { transform: translateY(2px)  scale(1, 1); }
+    100% { transform: translateY(-4px) scale(1, 1); }
+  }
+  #refreshBtn.loading svg {
+    transform-origin: 50% 100%;
+    animation: ballBounce 0.7s ease-in-out infinite;
+  }
+
+  /* Pull to refresh: the ball waits just above the list and is drawn into
+     view as the list is pulled down. Same ball as in the button, so the
+     gesture and the indicator speak with one voice. */
+  .pull-ball {
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    margin-left: -11px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms linear;
+  }
+  .pull-ball.ready svg { transform: scale(1.15); }
+  .pull-ball svg { display: block; transition: transform 140ms ease-out; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #refreshBtn.loading svg { animation: none; opacity: 0.5; }
+  }
 
   /* Anzahl der Live-Matches als kleine rote Marke im "Live"-Tab */
   /* A word has no free corner the way an icon does, so the badge gets a slot
@@ -286,6 +317,7 @@
   /* ---------- Inhalt: Matches nach Turnier gruppiert ---------- */
   /* The one scrolling element in the app */
   main {
+    position: relative;               /* anchor for the pull-to-refresh ball */
     flex: 1;
     overflow-y: auto;
     overscroll-behavior: none;
@@ -696,8 +728,12 @@
   <div class="topbar">
     <h1><span class="ball">●</span> Tennis Freak</h1>
     <button id="refreshBtn" type="button" aria-label="Refresh" title="Refresh">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
-        <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
+      <!-- Tennis ball: filled circle with the two seams that run down its
+           sides. Doubles as the loading indicator, bouncing while it loads. -->
+      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" fill="var(--accent)"/>
+        <path d="M5.1 5.6a10.5 10.5 0 0 1 0 12.8M18.9 5.6a10.5 10.5 0 0 0 0 12.8"
+              fill="none" stroke="#1a2208" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
     </button>
   </div>
@@ -712,6 +748,14 @@
 </header>
 
 <main>
+  <!-- Waits above the list and is drawn into view when the list is pulled -->
+  <div id="pullBall" class="pull-ball" aria-hidden="true">
+    <svg width="22" height="22" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" fill="var(--accent)"/>
+      <path d="M5.1 5.6a10.5 10.5 0 0 1 0 12.8M18.9 5.6a10.5 10.5 0 0 0 0 12.8"
+            fill="none" stroke="#1a2208" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+  </div>
   <!-- Scrolls with the list rather than sitting in the frame, so nothing is
        cut off along its lower edge -->
   <div id="status" class="statusline"></div>
@@ -1714,7 +1758,7 @@ function updateChrome() {
   document.querySelector('.tabs-discipline').style.display =
     state.status === 'rankings' ? 'none' : 'flex';
 
-  document.getElementById('refreshBtn').classList.toggle('spinning', state.loading);
+  document.getElementById('refreshBtn').classList.toggle('loading', state.loading);
   const status = document.getElementById('status');
   const ts = state.fetchedAt[state.tour];
   let html = ts ? 'Updated ' + fmtClock.format(new Date(ts)) : '';
@@ -1832,8 +1876,61 @@ document.getElementById('detail').addEventListener('click', (e) => {
   if (e.target.closest('.detail-close')) closeDetail(false);
 });
 window.addEventListener('popstate', () => closeDetail(true));
-document.getElementById('refreshBtn').addEventListener('click', () =>
-  state.status === 'rankings' ? refreshRankings() : refresh());
+/* ---------- Ziehen zum Aktualisieren ---------- */
+
+// Built by hand: the browser's own gesture belongs to the page, and the page
+// no longer scrolls. Only main does, and only from its very top.
+const PULL_TRIGGER = 64;              // how far to pull before it fires
+const PULL_MAX = 96;                  // beyond this the list stops following
+const PULL_RESIST = 0.5;              // half the finger's travel, so it pulls back
+
+const mainEl = document.querySelector('main');
+const pullBall = document.getElementById('pullBall');
+let pullFrom = 0;
+let pullBy = 0;
+let pulling = false;
+
+function showPull(px) {
+  pullBall.style.opacity = px ? Math.min(1, px / PULL_TRIGGER) : 0;
+  pullBall.classList.toggle('ready', px >= PULL_TRIGGER);
+  // No transition while the finger is down, so the list tracks it exactly;
+  // one on the way back, so it does not snap
+  mainEl.style.transition = px ? 'none' : 'transform 220ms cubic-bezier(0.32, 0.72, 0, 1)';
+  mainEl.style.transform = px ? 'translateY(' + px + 'px)' : '';
+}
+
+mainEl.addEventListener('touchstart', (e) => {
+  if (mainEl.scrollTop > 0 || state.loading || state.detail) return;
+  pullFrom = e.touches[0].clientY;
+  pullBy = 0;
+  pulling = true;
+}, { passive: true });
+
+mainEl.addEventListener('touchmove', (e) => {
+  if (!pulling) return;
+  const moved = e.touches[0].clientY - pullFrom;
+  // Upwards is ordinary scrolling: hand the gesture back
+  if (moved <= 0) {
+    pulling = false;
+    showPull(0);
+    return;
+  }
+  pullBy = Math.min(PULL_MAX, moved * PULL_RESIST);
+  showPull(pullBy);
+}, { passive: true });
+
+mainEl.addEventListener('touchend', () => {
+  if (!pulling) return;
+  pulling = false;
+  const far = pullBy >= PULL_TRIGGER;
+  showPull(0);
+  if (far) refreshCurrent();
+}, { passive: true });
+
+const refreshCurrent = () =>
+  state.status === 'rankings' ? refreshRankings() : refresh();
+
+document.getElementById('refreshBtn').addEventListener('click', refreshCurrent);
 
 // Automatisch aktualisieren, aber nur solange die Seite sichtbar ist
 setInterval(() => {
