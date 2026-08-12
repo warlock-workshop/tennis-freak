@@ -375,7 +375,9 @@
   .match:active { background: rgba(255, 255, 255, 0.05); }
 
   /* Covers the whole viewport including header and glass bar (z-index 10/20)
-     and brings its own scrolling, so the list keeps its position underneath */
+     and brings its own scrolling, so the list keeps its position underneath.
+     Enters as a sheet from the bottom on the curve iOS uses for its own:
+     quick off the mark, soft on arrival */
   .detail {
     position: fixed;
     inset: 0;
@@ -383,6 +385,21 @@
     background: var(--bg);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    transform: translateY(100%);
+    transition: transform 260ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .detail.open { transform: translateY(0); }
+
+  /* Switching tour, discipline or tab lets the list settle in. Deliberately
+     not on the minute refresh: an app twitching by itself reads as cheap */
+  @keyframes settle {
+    from { opacity: 0; transform: translateY(6px); }
+  }
+  #content.settle { animation: settle 180ms ease-out; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .detail { transition: none; }
+    #content.settle { animation: none; }
   }
   body.detail-open { overflow: hidden; }
   .detail-inner {
@@ -774,7 +791,7 @@ async function fetchEventIds(tour, id, year) {
                          '/athletes/' + id + '/eventlog?limit=200');
   } catch (e) {
     // Seasons before a player's first tour appearance simply do not exist
-    if (/HTTP 40[04]/.test(e.message)) return {};
+    if (/HTTP 40[04]/.test(e.message)) return [];
     throw e;
   }
   const list = [];
@@ -1274,17 +1291,14 @@ function playerHtml(tour, athlete, withName = true) {
 }
 
 function renderDetail() {
+  // Nothing to draw while closed; hiding and emptying the sheet is done by
+  // closeDetail once it has slid out
+  if (!state.detail) return;
   const el = document.getElementById('detail');
-  if (!state.detail) {
-    el.hidden = true;
-    el.innerHTML = '';
-    return;
-  }
   // The view is redrawn by the minute refresh and by every block that finishes
   // loading; without this the reader would be thrown back to the top each time
   const keepScroll = el.scrollTop;
   const { tour, compId } = state.detail;
-  el.hidden = false;
 
   // Opened from the ranking: one player instead of a match
   if (state.detail.athlete) {
@@ -1408,6 +1422,12 @@ function select(key, val) {
   localStorage.setItem(key, val);
   updateChrome();
   render();
+  // Restart the settling animation; reading the layout in between is what
+  // makes the browser treat it as a new run instead of ignoring it
+  const content = document.getElementById('content');
+  content.classList.remove('settle');
+  void content.offsetWidth;
+  content.classList.add('settle');
   // Beim Ansichtswechsel oben beginnen (Auto-Refresh behält die Position)
   window.scrollTo(0, 0);
   // Beim Tour-Wechsel nachladen, falls die Daten fehlen oder veraltet sind
@@ -1431,17 +1451,37 @@ function openDetail(evId, compId) {
   // A history entry makes the browser back gesture close the view; in the
   // standalone app, where that gesture is missing, the ✕ button does it
   history.pushState({ detail: compId }, '');
-  document.body.classList.add('detail-open');
-  renderDetail();
+  showDetail();
   // The rankings feed carries the world ranking shown per player
   ensureRankings(state.tour);
+}
+
+const SHEET_MS = 260;                 // matches the transition on .detail
+let sheetTimer = 0;
+
+// Draws the sheet and slides it in. The layout has to be read once between
+// unhiding and adding the class, otherwise the browser folds both steps into
+// one and the sheet appears without moving.
+function showDetail() {
+  const el = document.getElementById('detail');
+  clearTimeout(sheetTimer);
+  document.body.classList.add('detail-open');
+  renderDetail();
+  el.hidden = false;
+  void el.offsetHeight;
+  el.classList.add('open');
 }
 
 function closeDetail(fromHistory) {
   if (!state.detail) return;
   state.detail = null;
+  const el = document.getElementById('detail');
+  el.classList.remove('open');
   document.body.classList.remove('detail-open');
-  renderDetail();
+  // Emptying it right away would slide out a blank sheet. A timer rather than
+  // the transition event, which never fires once motion is switched off.
+  clearTimeout(sheetTimer);
+  sheetTimer = setTimeout(() => { el.hidden = true; el.innerHTML = ''; }, SHEET_MS);
   if (!fromHistory) history.back();
   window.scrollTo(0, listScroll);
 }
@@ -1462,8 +1502,7 @@ function openPlayer(id) {
     },
   };
   history.pushState({ player: id }, '');
-  document.body.classList.add('detail-open');
-  renderDetail();
+  showDetail();
 }
 
 // One delegated listener instead of one per card
