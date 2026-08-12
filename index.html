@@ -130,8 +130,12 @@
   }
 
   /* Status-Wahl: schwebende "Liquid Glass"-Leiste am unteren Rand */
+  /* Hangs off the frame, not off the viewport, so Safari's own bottom toolbar
+     cannot push it up. The body is positioned itself, so it is already the
+     thing this measures from. Tried once before against a frame that fell
+     short of the screen, which is why it sat too high then. */
   .bottombar {
-    position: fixed;
+    position: absolute;
     left: 50%;
     transform: translateX(-50%);
     bottom: calc(12px + env(safe-area-inset-bottom));
