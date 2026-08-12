@@ -574,7 +574,9 @@
 
   /* Head-to-head: the heading line is the control, since the tally under it
      is a reading and not something to press */
-  /* Padded so the whole strip answers the tap, not just the line of text */
+  /* While folded the whole section is the button */
+  .d-sec.foldable { cursor: pointer; }
+  .d-sec.foldable:active { opacity: 0.6; }
   .h2h-head {
     display: flex;
     align-items: center;
@@ -1466,12 +1468,13 @@ const fmtPrize = new Intl.NumberFormat('en-GB', {
 // Wraps a lazily loaded block. While it is outstanding the block is absent
 // altogether rather than standing there as a placeholder that later changes
 // height and shoves everything below it down.
-function sectionHtml(key, title, entry, body) {
+function sectionHtml(key, title, entry, body, cls) {
   if (entry.status === 'loading') return '';
   const inner = entry.status === 'error'
     ? '<div class="d-note error">' + esc(entry.error) + '</div>'
     : body(entry.value);
-  return '<section class="d-sec" data-key="' + key + '">' + title + inner + '</section>';
+  return '<section class="d-sec' + (cls ? ' ' + cls : '') + '" data-key="' + key + '">' +
+    title + inner + '</section>';
 }
 
 // Which blocks have already docked in the open sheet. Without this the whole
@@ -1579,7 +1582,10 @@ function h2hHtml(tour, comps, compId) {
     '</div>';
     if (!h2hOpen) return tally;
     return tally + meetings.map((m) => meetingRowHtml(m, new Date(m.date).getFullYear())).join('');
-  });
+  // Folded, the whole box is the target: it is small and says one thing, so
+  // there is nothing in it worth aiming at separately. Unfolded, only the
+  // heading closes it again, or reading the list would fold it away.
+  }, h2hOpen ? '' : 'foldable');
 }
 
 // The last matches a player has played, newest first
@@ -1914,7 +1920,7 @@ function toggleH2h() {
 
 document.getElementById('detail').addEventListener('click', (e) => {
   if (e.target.closest('.detail-close')) return closeDetail(false);
-  if (e.target.closest('.h2h-head')) toggleH2h();
+  if (e.target.closest('.h2h-head') || e.target.closest('.d-sec.foldable')) toggleH2h();
 });
 window.addEventListener('popstate', () => closeDetail(true));
 /* ---------- Ziehen zum Aktualisieren ---------- */
