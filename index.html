@@ -238,11 +238,15 @@
     cursor: pointer;
   }
   #refreshBtn svg { display: block; margin: auto; }
+  #refreshBtn.loading svg { animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    #refreshBtn.loading svg { animation: none; opacity: 0.5; }
+  }
 
-  /* The ball belongs to the gesture: it is drawn out from above the list
-     while pulling, then stays and bounces for as long as it loads. The
-     button keeps the circular arrow, which is what says "refresh"; a ball
-     there would be a second indicator saying the same thing twice. */
+  /* The ball belongs to the pull and to nothing else: drawn out from above
+     the list while pulling, gone once let go. What happens after that is the
+     button's business. */
   .pull-ball {
     position: absolute;
     top: -30px;
@@ -256,26 +260,6 @@
   /* Grows a little once far enough to fire, as the one bit of feedback the
      finger gets before letting go */
   .pull-ball.ready svg { transform: scale(1.15); }
-  /* Held below the header while loading, whichever way it was started */
-  .pull-ball.loading { opacity: 1; transform: translateY(44px); }
-  /* The squash at the lowest point is what turns a moving ball into a
-     bouncing one. The keyframes are spaced so it falls quickly and rises
-     slowly, which is what gravity looks like. */
-  @keyframes ballBounce {
-    0%   { transform: translateY(-5px) scale(1, 1); }
-    40%  { transform: translateY(2px)  scale(1, 1); }
-    48%  { transform: translateY(3px)  scale(1.18, 0.82); }
-    58%  { transform: translateY(2px)  scale(1, 1); }
-    100% { transform: translateY(-5px) scale(1, 1); }
-  }
-  .pull-ball.loading svg {
-    transform-origin: 50% 100%;
-    animation: ballBounce 0.7s ease-in-out infinite;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .pull-ball.loading svg { animation: none; }
-  }
 
   /* Anzahl der Live-Matches als kleine rote Marke im "Live"-Tab */
   /* A word has no free corner the way an icon does, so the badge gets a slot
@@ -1798,9 +1782,7 @@ function updateChrome() {
   document.querySelector('.tabs-discipline').style.display =
     state.status === 'rankings' ? 'none' : 'flex';
 
-  // The ball is the loading indicator, whether the refresh came from the
-  // gesture or from the button
-  document.getElementById('pullBall').classList.toggle('loading', state.loading);
+  document.getElementById('refreshBtn').classList.toggle('loading', state.loading);
   const status = document.getElementById('status');
   const ts = state.fetchedAt[state.tour];
   let html = ts ? 'Updated ' + fmtClock.format(new Date(ts)) : '';
@@ -1944,9 +1926,7 @@ let pullBy = 0;
 let pulling = false;
 
 function showPull(px) {
-  // While loading the ball stays put: the class holds it, so the inline value
-  // is cleared rather than set to zero
-  pullBall.style.opacity = px ? Math.min(1, px / PULL_TRIGGER) : '';
+  pullBall.style.opacity = px ? Math.min(1, px / PULL_TRIGGER) : 0;
   pullBall.classList.toggle('ready', px >= PULL_TRIGGER);
   // No transition while the finger is down, so the list tracks it exactly;
   // one on the way back, so it does not snap
@@ -1978,10 +1958,8 @@ mainEl.addEventListener('touchend', () => {
   if (!pulling) return;
   pulling = false;
   const far = pullBy >= PULL_TRIGGER;
-  // Started first, so the ball is already marked as loading when the pull is
-  // let go and it does not blink out and back in
-  if (far) refreshCurrent();
   showPull(0);
+  if (far) refreshCurrent();
 }, { passive: true });
 
 const refreshCurrent = () =>
