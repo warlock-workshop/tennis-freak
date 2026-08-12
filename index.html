@@ -49,8 +49,12 @@
        Known cost, learned in June (1f1c31b, reverted by 1ed36ab): Safari
        only collapses its toolbar when the page scrolls, so in the browser
        it stays expanded. Launched from the home screen there is no toolbar. */
-    height: 100vh;                    /* fallback for older iOS */
-    height: 100dvh;
+    /* Pinned to the edges rather than given a height. Viewport units are
+       interpreted: in the standalone app iOS took the safe areas off 100dvh,
+       which left the frame short of the screen and the list cut off above a
+       band of bare background. Four edges cannot be interpreted. */
+    position: fixed;
+    inset: 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;
